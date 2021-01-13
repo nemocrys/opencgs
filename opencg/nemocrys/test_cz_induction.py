@@ -1,35 +1,35 @@
 import numpy as np
+import os
 import yaml
 
 import pyelmer.elmer as elmer
 from pyelmer.gmsh_objects import Model, Shape, MeshControlConstant, MeshControlLinear, MeshControlExponential
-from pyelmer.execute import run_elmer_grid, run_elmer_solver
-from pyelmer.post import scan_logfile
 
-import cz_geometry
-import opencg
+import opencg.sim
+import opencg.geo.czochralski as cz
 
 
 # TODO logging
+THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 
-def geometry(config):
-    # TODO Geometry in separate classes? -> Crucible, Inductor, Melt
-    dim = config['settings']['dimension']
+def geometry(config, dim=2):
+    # load base configuration
+    with open(THIS_DIR + '/test_cz_geo.yml') as f:
+        base_config = yaml.safe_load(f)
+    config.update(base_config)
 
-    # initialize gmsh
+    # initialize geometry model
     model = Model('cz-induction')
 
     # geometry
-    # TODO initial condition
-    crucible = cz_geometry.crucible(model, dim, config['bodies']['crucible'])
-    melt = cz_geometry.melt(model, dim, config['bodies']['melt'], crucible)
-    crystal = cz_geometry.crystal(model, dim, config['bodies']['crystal'], melt)
-    inductor = cz_geometry.inductor(model, dim, config['bodies']['inductor'])
-    air = cz_geometry.air(model, dim, [0, -0.1, 0], [0.3, 0.5])
+    crucible = cz.crucible(model, dim, **config['crucible'])
+    melt = cz.melt(model, dim, crucible, **config['melt'])
+    crystal = cz.crystal(model, dim, **config['crystal'], melt=melt)
+    inductor = cz.inductor(model, dim, **config['inductor'])
+    air = cz.air(model, dim, **config['air'])
     model.synchronize()
 
     # boundaries
-    # TODO Heat Transfer Coefficients
     if_crucible_melt = Shape(model, dim - 1, 'if_crucible_melt', crucible.get_interface(melt))
     if_melt_crystal = Shape(model, dim - 1,  'if_melt_crystal', melt.get_interface(crystal))
     if_crystal_air = Shape(model, dim - 1, 'if_crystal_air', crystal. get_interface(air))
@@ -57,10 +57,8 @@ def geometry(config):
 
 
 def elmer_setup(config, model):
-    # TODO simulation configuration -> keep yaml file?
-
     # simulation
-    sim = opencg.ElmerSimulation(config, phase_change=True, transient=False, heat_control=True)
+    sim = opencg.sim.ElmerSimulation(config, phase_change=True, transient=False, heat_control=True)
 
     # solvers
     sim.set_equations(heat=True, induction=True, probes=True)
@@ -92,6 +90,7 @@ def elmer_setup(config, model):
     sim.add_radiation_boundary(model['if_melt_air'])
     sim.add_radiation_boundary(model['if_inductor_air'])
     sim.add_temperature_boundary(model['bnd_air_outside'], 273.15)
+    # TODO Heat Transfer Coefficients
 
     # export
     sim.export()
@@ -100,7 +99,10 @@ def elmer_setup(config, model):
     return sim
 
 if __name__ == "__main__":
-    with open('./base_parameters.yml') as f:
+    from pyelmer.execute import run_elmer_grid, run_elmer_solver
+    from pyelmer.post import scan_logfile
+
+    with open('./examples/config.yml') as f:
         config = yaml.safe_load(f)
     model = geometry(config)
     run_elmer_grid('./simdata/_test/', 'cz_induction.msh')

@@ -1,16 +1,19 @@
 from pyelmer.gmsh_objects import Shape
 from pyelmer.gmsh_utils import *
 
-def crucible(model, dim, config):
+def crucible(model, dim, h, r_in, r_out, t_bt, char_l=0, T_init=273.15):
     crc = Shape(model, dim, 'crucible')
 
-    crc.params.h = config['h']
-    crc.params.r_in = config['r-in']
-    crc.params.r_out = config['r-out']
-    crc.params.t_bt = config['t-bt']
-    crc.params.T_init = config['T-init']
+    crc.params.h = h
+    crc.params.r_in = r_in
+    crc.params.r_out = r_out
+    crc.params.t_bt = t_bt
+    crc.params.T_init = T_init
     crc.params.X0 = [0, -crc.params.t_bt]
-    crc.mesh_size = crc.params.r_out / config['t-lc']
+    if char_l == 0:
+        crc.mesh_size = r_out / 20
+    else:
+        crc.mesh_size = char_l
 
     body = cylinder(0, crc.params.X0[1], 0, crc.params.r_out, crc.params.h, dim)
     hole = cylinder(0, 0, 0, crc.params.r_in, crc.params.h -crc.params.t_bt, dim)
@@ -21,12 +24,15 @@ def crucible(model, dim, config):
 
     return crc
     
-def melt(model, dim, config, crucible, crystal_radius=0):
+def melt(model, dim, crucible, h, char_l=0, T_init=273.15, crystal_radius=0):
     melt = Shape(model, dim, 'melt')
-    melt.params.h = config['h']
-    melt.params.T_init = config['T-init']
+    melt.params.h = h
+    melt.params.T_init = T_init
     melt.params.X0 = [0, 0]
-    melt.mesh_size = melt.params.h / config['t-lc']
+    if char_l == 0:
+        melt.mesh_size = melt.params.h / 10
+    else:
+        melt.mesh_size = char_l
 
     if crystal_radius == 0:  # no meniscus
         melt.geo_ids = [cylinder(0, 0, 0, crucible.params.r_in, melt.params.h, dim)]
@@ -38,13 +44,15 @@ def melt(model, dim, config, crucible, crystal_radius=0):
 
     return melt
 
-def crystal(model, dim, config, melt=None):
-    # TODO implement as own child class of Shape
+def crystal(model, dim, r, l, char_l=0, T_init=273.15, melt=None):
     crys = Shape(model, dim, 'crystal')
-    crys.params.r = config['r']
-    crys.params.l = config['l']
-    crys.params.T_init = config['T-init']
-    crys.mesh_size = crys.params.r / config['t-lc']
+    crys.params.r = r
+    crys.params.l = l
+    crys.params.T_init = T_init
+    if char_l == 0:
+        crys.mesh_size = crys.params.r / 10
+    else:
+        crys.mesh_size = char_l
 
     if melt is None:  # detached crystal
         pass
@@ -55,20 +63,23 @@ def crystal(model, dim, config, melt=None):
     
     return crys
 
-def inductor(model, dim, config):
+def inductor(model, dim, d, d_in, g, n, X0, char_l=0, T_init=273.15):
     ind = Shape(model, dim, 'inductor')
-    ind.params.d = config['d']
-    ind.params.d_in = config['d-in']
-    ind.params.g = config['g']
-    ind.params.n = config['n']
-    ind.params.X0 = [config['x'], config['h-over-floor'] - 0.075]  # TODO
-    ind.params.T_init = config['T-init']
-    ind.params.area = np.pi * (ind.params.d**2 - ind.params.d_in**2) / 4
-    ind.mesh_size = ind.params.d / config['t-lc']
+    ind.params.d = d
+    ind.params.d_in = d_in
+    ind.params.g = g
+    ind.params.n = n
+    ind.params.X0 = X0  # TODO
+    ind.params.T_init = T_init
+    ind.params.area = np.pi * (d**2 - d_in**2) / 4
+    if char_l == 0:
+        ind.mesh_size = ind.params.d / 10
+    else:
+        ind.mesh_size = char_l
 
-    x = ind.params.X0[0] + ind.params.d / 2
-    y = ind.params.X0[1] + ind.params.d / 2
-    for i in range(ind.params.n):
+    x = ind.params.X0[0] + d / 2
+    y = ind.params.X0[1] + d / 2
+    for _ in range(ind.params.n):
         circle_1d = factory.addCircle(x, y, 0, ind.params.d / 2)
         circle = factory.addSurfaceFilling(factory.addCurveLoop([circle_1d]))
         hole_1d = factory.addCircle(x, y, 0, ind.params.d_in / 2)
@@ -82,7 +93,7 @@ def inductor(model, dim, config):
 
     return ind
 
-def air(model, dim, X_min, X_max):
+def air(model, dim, X_min, X_max, T_init=273.15):
     shapes = model.get_shapes(2)
     dim_tags = []
     for shape in shapes:
@@ -91,6 +102,7 @@ def air(model, dim, X_min, X_max):
     air = Shape(model, dim, 'air')
     air.params.X_min = X_min
     air.params.X_max = X_max
+    air.params.T_init = T_init
 
     tag = factory.addRectangle(X_min[0], X_min[1], X_min[2], X_max[0], X_max[1])
     air.geo_ids = cut([(2, tag)], dim_tags, False)

@@ -1,0 +1,29 @@
+# Base configuration of test cz geometry
+air:
+  X_min: [0, -0.1, 0]
+  X_max: [0.3, 0.5]
+  T_init: 353.15
+
+crucible:
+  h: 0.05
+  r_in: 0.05
+  r_out: 0.06
+  t_bt: 0.01
+  T_init: 520
+
+crystal:
+  l: 0.05  # variable
+  r: 0.004  # variable
+  T_init: 490
+
+inductor:
+  d: 0.01  # guessed
+  d_in: 0.008  # guessed
+  g: 0.006  # guessed
+  n: 3
+  X0: [0.075, -0.01]
+  T_init: 293.15
+
+melt:
+  h: 0.025  # variable
+  T_init: 506

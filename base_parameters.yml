@@ -1,0 +1,432 @@
+setup:
+  show-mesh: True
+  name: czochralski
+  path: './simdata/_test'
+
+settings:
+  induction-heating: True
+  dimension: 2
+  material-crystal: tin-solid
+  material-melt: tin-liquid
+  material-seed: tin-solid
+  smart-heater: True
+  phase-change : True
+  heat-convection: True
+  fast-simulation: False  # use relaxed convergence criteria given in solvers: fast-simulation section
+  transient: False
+  T-bndry: 293.15
+  Gravity: 9.81
+  v-pull: 4  # mm/min
+geometry:
+  heating-test: False
+  detached-crystal: False
+mesh:
+  lc-base: 0.01  # maximum characteristic length
+  lc-factor: 1  # factor for mesh size
+  order: 2
+induction:
+  frequency: 13.5e+3  # Hz
+  current: 200  # A
+  windings: 3
+  shape: circle
+  mgdyn-solver: False  # otherwise statmag is used
+resistance:
+  power: 100
+  include-cover: True
+  no-insulation: False
+smart-heater:
+  T: 505  # melting point tin
+  control-point: False  # if False: use T at melt-crystal interface (triple point)
+  x: 0.055
+  y: 0.02
+  z: 0.0
+phase-change:
+  fixed-tp: True
+heat-convection:
+  factor: 1
+  melt: 10  # 11.11
+  crystal: 10  # 11.74
+  crucible-top: 10  # 9.71
+  crucible-inside: 10  # 16.16
+  crucible-outside: 6.5  # according to MMS Study  # 9.56
+  heater: 10  # guessed
+  T-ext: 293.15
+diameter-iteration:
+  r-min: 1.25e-3  # resulting from seed radius ( r_seed < r_crys)
+  r-max: 1.e-2  # resulting from crucible radius
+  dT-max: 1.e-2
+  i-max: 10
+  fast-simulation: True
+transient:
+  dt: 0.1
+  dt-out: 10
+  t-max: 10
+  restart: False
+  restart-file: case.result
+  restart-time: 1
+  mesh-movement: True
+  smart-heater-t: 1
+
+bodies:
+  air:
+    T-init: 353.15
+  axis-bottom:
+    l: 0.015  # variable
+    r-out: 0.02  # measured
+    r-in: 0.0075  # measured
+    t-lc: 5
+    T-init: 323.15
+  axis-top:
+    r1: 0.01  # measured
+    # r2: 0.02  # measured but not implemented
+    # l-thin: 0.08  # measured but not implemented
+    t-lc: 3
+    T-init: 303.15
+  crucible:
+    h: 0.05  # drawing
+    r-in: 0.05  # drawing
+    r-out: 0.06  # drawing
+    t-bt: 0.01  # drawing
+    t-lc: 15
+    T-init: 520
+  crystal:
+    l: 0.05  # variable
+    r: 0.004  # variable
+    t-lc: 10
+    t-lc-if: 20  # at melt-crystal interface
+    T-init: 490
+  heater:
+    h: 0.1  # drawing
+    t: 0.004  # drawing
+    x: 0.055  # drawing
+    h-over-floor: 0.03  # CAD
+    t-lc: 3
+    T-init: 650
+  inductor:
+    d: 0.01  # guessed
+    d-in: 0.008  # guessed
+    g: 0.006  # guessed
+    n: 3
+    x: 0.075  # radius to middle of coil
+    h-over-floor: 0.07  # guessed
+    t-lc: 10
+    T-init: 293.15
+  insulation-bottom:
+    r-in: 0.04 # 0.025  # CAD
+    t: 0.02  # CAD
+    t-lc: 4
+    T-init: 505
+  insulation-side:
+    h: 0.12  # CAD
+    r-in: 0.079  # CAD
+    t: 0.025  # CAD
+    t-lc: 4
+  insulation-top:
+    r-in: 0.025  # CAD
+    t: 0.02  # CAD
+    t-lc: 4
+  melt:
+    h: 0.025  # variable
+    t-lc: 15
+    meniscus-res: 300  # spline points at meniscus in gmsh (error if too low - bug gmsh?)
+    T-init: 506
+  seed:
+    l: 0.03  # estimated
+    r: 0.001  # estimated
+    t-lc: 10
+    T-init: 420
+  support-adapter:
+    # r: equal to support insulation radius
+    # r-in: equal to support insulation radius
+    r: 35.0e-3
+    t: 4.5e-3
+    t-total: 19.5e-3
+    t-lc: 3
+    T-init: 313.15
+  support-insulation:
+    induction:
+      # r: 0.035  equal to crucible r
+      r-in: 0.01  # drawing
+      t: 0.025  # drawing 
+    resistance:
+      r: 0.035  # TODO not specified yet
+      r-in: 0.01  # TODO not specified yet
+      t: 0.015  # TODO not specified yet
+    t-lc: 10
+    T-init: 450
+  vessel:
+    h-in: 0.383  # CAD
+    r-in: 0.1315  # CAD
+    t: 0.005  # CAD
+    t-lc: 2
+    T-init: 293.15
+
+materials:
+  air:
+    Density: 1.1885  # 20°C
+    Electric Conductivity: 0.0 
+    Heat Capacity: 1006.4  # 20°C
+    Heat Conductivity: 25.873e-3  # 20°C
+    Relative Permeability: 1
+    Relative Permittivity: 1
+  copper-coil:
+    Density: 8960.0  # 20°C
+    Electric Conductivity: 0.0  # necessary for 2D
+    Emissivity: 0.2  # 327°C
+    Heat Capacity: 384.4  # interpolated for 20°C
+    Heat Conductivity: 390.0  # estimated using data sheets
+    Relative Permeability: 1
+    Relative Permittivity: 1
+  copper-seed:
+    Density: 8960.0  # 0°C
+    Electric Conductivity: 32.3e+6  # 200°C
+    Emissivity: 0.2  # 327°C
+    Heat Capacity: 415.0  # 200°C
+    Heat Conductivity: 390.0  # estimated using data sheets
+    Relative Permeability: 1
+    Relative Permittivity: 1
+  graphite-CZ3R6300:  # crucible, adapter
+    Density: 1730.0
+    Electric Conductivity: 5.88e+4
+    Emissivity: 0.7  # 205°C
+    Heat Capacity: 1237.0
+    Heat Conductivity: 65  # 20°C
+    Relative Permeability: 1
+    Relative Permittivity: 1
+  graphite-FU8957:  # heater
+    Density: 1750.0
+    Emissivity: 0.81  # 250°C
+    Heat Capacity: 1237.0
+    Heat Conductivity: 105  # averaged over different given values
+    Relative Permeability: 1
+    Relative Permittivity: 1
+  insulation:
+    Density: 220.0
+    Electric Conductivity: 1.95e+2
+    Emissivity: 0.7  # 250°C
+    Heat Capacity: 1237.0
+    Heat Conductivity: 0.2
+    Relative Permeability: 1
+    Relative Permittivity: 1
+  steel-1.4541:
+    Density: 7900.0  # 20°C
+    Electric Conductivity: 1.37e+3
+    Emissivity: 0.2  # 200°C
+    Heat Capacity:  470.0 # 20°C
+    Heat Conductivity: 15.0 # 20°C
+    Relative Permeability: 1
+    Relative Permittivity: 1
+  tin-liquid:
+    Density: 6980.0
+    Electric Conductivity: 2.08e+6
+    Emissivity: 0.064  # set equal to solid
+    Heat Capacity: 252.7
+    Heat Conductivity: 29.0
+    Relative Permeability: 1
+    Relative Permittivity: 1
+    Liquid: 'Logical True'
+    Surface Tension: 0.56
+    Beta: 10  # Deg
+  tin-solid:
+    Density: 7179.0
+    Electric Conductivity: 4.38e+6
+    Emissivity: 0.064
+    Heat Capacity: 244.0
+    Heat Conductivity: 60.0
+    Relative Permeability: 1
+    Relative Permittivity: 1
+    Solid: 'Logical True'
+    Melting Point: 505
+    Latent Heat: 5.96e+4  # J / kg
+  bismuth-liquid:
+    Density: 10050
+    Electric Conductivity: 7.68e+5
+    Emissivity: 0.366  # set equal to solid
+    Heat Capacity: 146.3
+    Heat Conductivity: 10.23
+    Relative Permeability: 1
+    Relative Permittivity: 1
+    Liquid: 'Logical True'
+    Surface Tension: 0.378
+  bismuth-solid:
+    Density: 9832
+    Electric Conductivity: 3.44e+5
+    Emissivity: 0.366
+    Heat Capacity: 147
+    Heat Conductivity: 7.5
+    Relative Permeability: 1
+    Relative Permittivity: 1
+    Solid: 'Logical True'
+    Melting Point: 544.1
+    Latent Heat: 5.21e+4  # J / kg
+
+probes:  # coordinates respective to crucible center [x, y]
+  crc-bt: [0.0, -0.01]
+  crc-top: [0.055, 0.04]
+  crc-wall+1: [0.055, 0.03]
+  crc-wall: [0.055, 0.02]
+  crc-wall-1: [0.055, 0.01]
+  crc-wall-2: [0.055, 0.00]
+  crc-wall-bt: [0.055, -0.01]
+  crys-seed: [0, 0]  # defined in czochralski.py
+  melt: [0.048, 0.002]
+  # melt-surf-1: [0.025, 0.01]
+  # melt-surf-2: [0.02, 0.01]
+  # melt-surf-3: [0.015, 0.01]
+  # MF-1: [0.036, -0.10]
+  # MF-0: [0.036, -0.09]
+  # MF+1: [0.036, -0.08]
+
+solvers:
+  HeatSolver:
+    Equation: 'Heat Equation'
+    Procedure: '"HeatSolve" "HeatSolver"'
+    Variable: '"Temperature"'
+    Variable Dofs: 1
+    Calculate Loads: True
+    Exec Solver: Always
+    Nonlinear System Convergence Tolerance: 1.0e-5
+    Nonlinear System Max Iterations: 1000
+    Nonlinear System Relaxation Factor: 0.7
+    Steady State Convergence Tolerance: 1.0e-6
+    Stabilize: True  # Necessary in convection-dominated systems (models manual p.17) --> decreases simulation duration
+    Optimize Bandwidth: True
+    Linear System Solver: Iterative  
+    Linear System Iterative Method: BiCGStab
+    Linear System Max Iterations: 10000
+    Linear System Preconditioning: ILU
+    Linear System Precondition Recompute: 1
+    Linear System Convergence Tolerance: 1.0e-9
+    Linear System Abort Not Converged: True
+    Linear System Residual Output: 1
+    Smart Heater Control After Tolerance: 1.0e-2
+  MagnetoDynamics2DHarmonic:
+    Equation: MgDyn2DHarmonic
+    Procedure: '"MagnetoDynamics2D" "MagnetoDynamics2DHarmonic"'
+    Variable: 'Potential[Potential Re:1 Potential Im:1]'
+    Variable Dofs: 2
+    Exec Solver: Always
+    Nonlinear System Convergence Tolerance: 1.0e-5
+    Nonlinear System Max Iterations: 1000
+    Nonlinear System Relaxation Factor: 0.7
+    Steady State Convergence Tolerance: 1.0e-6
+    Stabilize: True
+    Optimize Bandwidth: True
+    Linear System Solver: Iterative  
+    Linear System Iterative Method: BiCGStab
+    Linear System Max Iterations: 1000
+    Linear System Preconditioning: ILU
+    Linear System Precondition Recompute: 1
+    Linear System Convergence Tolerance: 1.0e-7
+    Linear System Abort Not Converged: True
+    Linear System Residual Output: 1
+  MagnetoDynamicsCalcFields:
+    Equation: CalcFields
+    Procedure: '"MagnetoDynamics" "MagnetoDynamicsCalcFields"'
+    Potential Variable: Potential
+    Calculate Joule Heating: True
+    Calculate Magnetic Field Strength: True
+    Calculate Electric Field: True
+    Calculate Current Density: True
+    Exec Solver: Always
+    Calculate Nodal Fields: Logical False
+    Calculate Elemental Fields: Logical True
+  StatMagSolver:
+    Equation: StatMagSolver
+    Procedure: '"StatMagSolve" "StatMagSolver"'
+    Variable: 'Potential[Potential Re:1 Potential Im:1]'
+    Variable DOFs: 2
+    Calculate Joule Heating: 'Logical True'
+    Calculate Magnetic Flux: 'Logical True'
+    Nonlinear System Convergence Tolerance: 1.0e-5
+    Nonlinear System Max Iterations: 1000
+    Nonlinear System Relaxation Factor: 0.7
+    Steady State Convergence Tolerance: 1.0e-6
+    Optimize Bandwidth: True
+    Linear System Solver: Iterative  
+    Linear System Iterative Method: BiCGStab
+    Linear System Max Iterations: 10000
+    Linear System Preconditioning: ILU
+    Linear System Precondition Recompute: 1
+    Linear System Convergence Tolerance: 1.0e-9
+    Linear System Abort Not Converged: True
+    Linear System Residual Output: 1
+  SaveMaterials: 
+    Exec Solver: 'before saving'
+    Procedure: 'File "SaveData" "SaveMaterials"'
+    Parameter 1: 'String "Heat Conductivity"'
+  ResultOutputSolver:
+    Exec Solver: 'after saving'
+    Equation: '"ResultOutput"'
+    Procedure: '"ResultOutputSolve" "ResultOutputSolver"'
+    VTU Format: True
+    Save Geometry Ids: 'Logical True'
+    # Scalar Field 1: '"Temperature"'
+    # Scalar Field 2: '"Heat Conductivity"'
+    # Scalar Field 3: '"Temperature Loads"'
+    # Scalar Field 4: '"Potential"'
+    # Scalar Field 5: '"Joule Heating"'
+    # Scalar Field 6: '"Magnetic Flux Density"'
+    # Scalar Field 7: '"Phase Surface"'
+    # Scalar Field 8: '"Joule Heating E"'
+    # Scalar Field 9: '"Magnetic Flux Density E"'
+  FluxSolver:
+    Exec Solver: 'before saving'
+    Equation: 'String "Flux Solver"'
+    Procedure: '"FluxSolver" "FluxSolver"'
+    Calculate Grad: 'Logical True'
+    Calculate Flux: 'Logical True'
+    Target Variable: 'String "Temperature"'
+    Flux Coefficient: 'String "Heat Conductivity"'
+    Linear System Solver: '"Iterative"'
+    Linear System Convergence Tolerance: 1.0e-8
+    Linear System Iterative Method: '"BiCGStab"'
+    Linear System Max Iterations: 500
+    Linear System Preconditioning: ILU
+    Linear System Residual Output: 0
+    Linear System Abort Not Converged: False
+  boundary-scalars:
+    Exec Solver: 'after saving'
+    Equation: SaveScalars
+    Procedure: '"SaveData" "SaveScalars"'
+    Filename: '"boundary-scalars.dat"'
+    Output Directory: './results'
+    Operator 1: 'boundary sum'
+    Variable 1: 'Temperature Loads'
+    Operator 2: 'diffusive flux'
+    Variable 2: Temperature
+    Coefficient 2: 'Heat Conductivity'
+  probe-scalars:
+    Exec Solver: 'after saving'
+    Procedure: '"SaveData" "SaveScalars"'
+    Filename: '"probes.dat"'
+    Output Directory: './results'
+    Exact Coordinates: True
+  SteadyPhaseChange:
+    Equation: PhaseSurface
+    Variable: '"PhaseSurface"'
+    Procedure: '"SteadyPhaseChange" "SteadyPhaseChange"'
+    # Internal Mesh Movement: 'Logical True'
+  TransientPhaseChange:
+    Equation: Transient Phase Change
+    Procedure: '"TransientPhaseChange" "TransientPhaseChange"'
+    Variable: '"PhaseSurface"'
+    Use Nodal Loads: Logical True
+    Triple Point Fixed: Logical True  # this modifies v-interface so that TP-Position remains constant
+    # Velocity Relaxation Factor
+    # Velocity Smoothing Factor
+    # Pull Rate Control -> if True it's adjusted so that TP-Position remains constant
+  MeshUpdate:
+    Equation: Mesh Update
+    Linear System Solver: Iterative
+    Linear System Iterative Method: BiCGStab
+    Linear System Preconditioning: ILU1
+    Linear System Max Iterations: 10000
+    Linear System Convergence Tolerance: 1.0e-9
+    Linear System Residual Output: 1
+    Steady State Convergence Tolerance: 1.0e-6
+  fast-simulation:
+    Steady State Max Iterations: 3
+    Steady State Convergence Tolerance: 1.e-6
+    Nonlinear System Convergence Tolerance: 1.0e-4
+    Linear System Convergence Tolerance: 1.e-9
