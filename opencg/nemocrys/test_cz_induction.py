@@ -28,30 +28,36 @@ def geometry(config_update, dim=2):
     melt = cz.melt(model, dim, crucible, **config['melt'])
     crystal = cz.crystal(model, dim, **config['crystal'], melt=melt)
     inductor = cz.inductor(model, dim, **config['inductor'])
-    air = cz.surrounding_box(model, dim, **config['air'])
+    seed = cz.seed(model, dim, **config['seed'], crystal=crystal)
+    ins = cz.crucible_support(model, dim,**config['insulation'], top_shape=crucible)
+    adp = cz.crucible_adapter(model, dim, **config['crucible_adapter'], top_shape=ins)
+    ax_bt = cz.crucible_support(model, dim, **config['axis_bt'], top_shape=adp)
+    vessel = cz.vessel(model, dim, **config['vessel'], adjacent_shapes=[ax_bt])
+    ax_top = cz.axis_top(model, dim, **config['axis_top'], seed=seed, vessel=vessel)
+    filling = cz.filling(model, dim, **config['filling'], vessel=vessel)
+
     model.synchronize()
+    model.show()
 
     # boundaries
     if_crucible_melt = Shape(model, dim - 1, 'if_crucible_melt', crucible.get_interface(melt))
     if_melt_crystal = Shape(model, dim - 1,  'if_melt_crystal', melt.get_interface(crystal))
-    if_crystal_air = Shape(model, dim - 1, 'if_crystal_air', crystal. get_interface(air))
-    if_crucible_air = Shape(model, dim - 1, 'if_crucible_air', crucible.get_interface(air))
-    if_melt_air = Shape(model, dim - 1, 'if_melt_air', melt.get_interface(air))
-    if_inductor_air = Shape(model, dim - 1, 'if_inductor_air', inductor.get_interface(air))
-    bnd_air_outside = Shape(model, dim - 1, 'bnd_air_outside',
-                            [air.top_boundary, air.right_boundary, air.bottom_boundary])
+    if_crystal_air = Shape(model, dim - 1, 'if_crystal_air', crystal. get_interface(filling))
+    if_crucible_air = Shape(model, dim - 1, 'if_crucible_air', crucible.get_interface(filling))
+    if_melt_air = Shape(model, dim - 1, 'if_melt_air', melt.get_interface(filling))
+    if_inductor_air = Shape(model, dim - 1, 'if_inductor_air', inductor.get_interface(filling))
 
     model.make_physical()
 
     # mesh
     model.deactivate_characteristic_length()
     model.set_characteristic_length(0.1)
-    for shape in [crucible, melt, crystal, inductor, air]:
+    for shape in [crucible, melt, crystal, inductor, filling]:
         # print(shape.name, shape.mesh_size)
         MeshControlConstant(model, shape.mesh_size, [shape])
     MeshControlConstant(model, 0.01, shapes=[crucible, crystal])
-    MeshControlLinear(model, if_crystal_air, 0.01, 0.1, shapes=[air])
-    MeshControlExponential(model, if_melt_air, 0.001, shapes=[melt, air])
+    MeshControlLinear(model, if_crystal_air, 0.01, 0.1, shapes=[filling])
+    MeshControlExponential(model, if_melt_air, 0.001, shapes=[melt, filling])
     model.generate_mesh()
 
     # visualize
