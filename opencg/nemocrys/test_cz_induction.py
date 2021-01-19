@@ -25,7 +25,7 @@ def geometry(config_update, dim=2):
 
     # geometry
     crucible = cz.crucible(model, dim, **config['crucible'])
-    melt = cz.melt(model, dim, crucible, **config['melt'])
+    melt = cz.melt(model, dim, crucible, **config['melt'], crystal_radius=config['crystal']['r'])
     crystal = cz.crystal(model, dim, **config['crystal'], melt=melt)
     inductor = cz.inductor(model, dim, **config['inductor'])
     seed = cz.seed(model, dim, **config['seed'], crystal=crystal)
