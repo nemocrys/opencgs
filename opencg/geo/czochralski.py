@@ -1,7 +1,12 @@
 from pyelmer.gmsh_objects import Shape
 from pyelmer.gmsh_utils import *
 
-def crucible(model, dim, h, r_in, r_out, t_bt, char_l=0, T_init=273.15):
+
+# TODO stl import
+# TODO add name property
+
+
+def crucible(model, dim, h, r_in, r_out, t_bt, char_l=0, T_init=273.15, material=''):
     crc = Shape(model, dim, 'crucible')
 
     crc.params.h = h
@@ -10,6 +15,8 @@ def crucible(model, dim, h, r_in, r_out, t_bt, char_l=0, T_init=273.15):
     crc.params.t_bt = t_bt
     crc.params.T_init = T_init
     crc.params.X0 = [0, -crc.params.t_bt]
+    crc.params.material=material
+
     if char_l == 0:
         crc.mesh_size = r_out / 20
     else:
@@ -24,11 +31,12 @@ def crucible(model, dim, h, r_in, r_out, t_bt, char_l=0, T_init=273.15):
 
     return crc
     
-def melt(model, dim, crucible, h, char_l=0, T_init=273.15, crystal_radius=0):
+def melt(model, dim, crucible, h, char_l=0, T_init=273.15, material='', crystal_radius=0):
     melt = Shape(model, dim, 'melt')
     melt.params.h = h
     melt.params.T_init = T_init
     melt.params.X0 = [0, 0]
+    melt.params.material= material
     if char_l == 0:
         melt.mesh_size = melt.params.h / 10
     else:
@@ -44,11 +52,12 @@ def melt(model, dim, crucible, h, char_l=0, T_init=273.15, crystal_radius=0):
 
     return melt
 
-def crystal(model, dim, r, l, char_l=0, T_init=273.15, melt=None):
+def crystal(model, dim, r, l, char_l=0, T_init=273.15, material='', melt=None):
     crys = Shape(model, dim, 'crystal')
     crys.params.r = r
     crys.params.l = l
     crys.params.T_init = T_init
+    crys.params.material = material
     if char_l == 0:
         crys.mesh_size = crys.params.r / 10
     else:
@@ -63,7 +72,7 @@ def crystal(model, dim, r, l, char_l=0, T_init=273.15, melt=None):
     
     return crys
 
-def inductor(model, dim, d, d_in, g, n, X0, char_l=0, T_init=273.15):
+def inductor(model, dim, d, d_in, g, n, X0, char_l=0, T_init=273.15, material=''):
     ind = Shape(model, dim, 'inductor')
     ind.params.d = d
     ind.params.d_in = d_in
@@ -72,6 +81,7 @@ def inductor(model, dim, d, d_in, g, n, X0, char_l=0, T_init=273.15):
     ind.params.X0 = X0  # TODO
     ind.params.T_init = T_init
     ind.params.area = np.pi * (d**2 - d_in**2) / 4
+    ind.params.material = material
     if char_l == 0:
         ind.mesh_size = ind.params.d / 10
     else:
@@ -93,7 +103,7 @@ def inductor(model, dim, d, d_in, g, n, X0, char_l=0, T_init=273.15):
 
     return ind
 
-def air(model, dim, X_min, X_max, T_init=273.15):
+def surrounding_box(model, dim, X_min, X_max, char_l=0.1, T_init=273.15, material=''):
     shapes = model.get_shapes(2)
     dim_tags = []
     for shape in shapes:
@@ -103,9 +113,35 @@ def air(model, dim, X_min, X_max, T_init=273.15):
     air.params.X_min = X_min
     air.params.X_max = X_max
     air.params.T_init = T_init
+    air.params.material = material
+    air.mesh_size=0.1
 
     tag = factory.addRectangle(X_min[0], X_min[1], X_min[2], X_max[0], X_max[1])
     air.geo_ids = cut([(2, tag)], dim_tags, False)
 
     return air
-    
+
+def crucible_support(model, dim, r_in, r_out, char_l=0, T_init=273.15, material=''):
+    pass
+
+def seed(model, dim, crystal, r, l, char_l=0, T_init=273.15, material=''):
+    pass
+
+def axis_top(model, dim, seed, r, l, char_l=0, T_init=273.15, material=''):
+    pass
+
+def vessel(model, dim, r_in, r_out, h_in, h_out, adjacent_shapes, char_l=0, T_init=273.15, material=''):
+    pass
+
+def filling(model, dim, vessel, shapes, char_l=0, T_init=273.15, material=''):
+    pass
+
+
+
+
+
+def resistance_heater():
+    pass
+
+def resistance_heating_insulation():
+    pass

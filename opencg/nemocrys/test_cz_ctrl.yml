@@ -1,0 +1,19 @@
+general:
+  show-mesh: True
+  name: czochralski
+  path: './simdata/_test'
+  fast-simulation: False  # use relaxed convergence criteria given in solvers: fast-simulation section
+
+geometry:  # TODO implement this!
+  heating-test: False
+  detached-crystal: False
+  dimension: 2
+
+diameter-iteration:
+  r-min: 1.25e-3  # resulting from seed radius ( r_seed < r_crys)
+  r-max: 1.e-2  # resulting from crucible radius
+  dT-max: 1.e-2
+  i-max: 10
+
+transient:
+  # TODO automatic steady-state simulation & restart from this base

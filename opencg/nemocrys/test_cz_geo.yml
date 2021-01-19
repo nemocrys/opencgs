@@ -1,8 +1,13 @@
 # Base configuration of test cz geometry
+mesh:
+  char-length-factor: 1 
+  order: 2
+
 air:
-  X_min: [0, -0.1, 0]
+  X_min: [0, -0.1, 0]  # TODO allow lists?
   X_max: [0.3, 0.5]
   T_init: 353.15
+  material: air  # TODO add all materials
 
 crucible:
   h: 0.05
@@ -10,11 +15,13 @@ crucible:
   r_out: 0.06
   t_bt: 0.01
   T_init: 520
+  material: graphite-CZ3R6300
 
 crystal:
   l: 0.05  # variable
   r: 0.004  # variable
   T_init: 490
+  material: tin-solid
 
 inductor:
   d: 0.01  # guessed
@@ -23,7 +30,9 @@ inductor:
   n: 3
   X0: [0.075, -0.01]
   T_init: 293.15
+  material: copper-inductor
 
 melt:
   h: 0.025  # variable
   T_init: 506
+  material: tin-liquid

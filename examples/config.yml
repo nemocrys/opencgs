@@ -1,2 +1,7 @@
 # simulation configuration
-simulation: 'hallo.'
+geometry:
+  # inductor:
+  #   g: 0.02  # guessed
+simulation:
+  heating_induction:
+    current: 50

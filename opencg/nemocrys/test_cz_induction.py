@@ -12,11 +12,13 @@ import opencg.geo.czochralski as cz
 # TODO logging
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 
-def geometry(config, dim=2):
+def geometry(config_update, dim=2):
     # load base configuration
     with open(THIS_DIR + '/test_cz_geo.yml') as f:
-        base_config = yaml.safe_load(f)
-    config.update(base_config)
+        config = yaml.safe_load(f)
+    if config_update is not None:
+        for body, update in config_update.items():
+            config[body].update(update)
 
     # initialize geometry model
     model = Model('cz-induction')
@@ -26,7 +28,7 @@ def geometry(config, dim=2):
     melt = cz.melt(model, dim, crucible, **config['melt'])
     crystal = cz.crystal(model, dim, **config['crystal'], melt=melt)
     inductor = cz.inductor(model, dim, **config['inductor'])
-    air = cz.air(model, dim, **config['air'])
+    air = cz.surrounding_box(model, dim, **config['air'])
     model.synchronize()
 
     # boundaries
@@ -42,8 +44,11 @@ def geometry(config, dim=2):
     model.make_physical()
 
     # mesh
-    # model.deactivate_characteristic_length()
+    model.deactivate_characteristic_length()
     model.set_characteristic_length(0.1)
+    for shape in [crucible, melt, crystal, inductor, air]:
+        # print(shape.name, shape.mesh_size)
+        MeshControlConstant(model, shape.mesh_size, [shape])
     MeshControlConstant(model, 0.01, shapes=[crucible, crystal])
     MeshControlLinear(model, if_crystal_air, 0.01, 0.1, shapes=[air])
     MeshControlExponential(model, if_melt_air, 0.001, shapes=[melt, air])
@@ -56,41 +61,37 @@ def geometry(config, dim=2):
     return model
 
 
-def elmer_setup(config, model):
+def elmer_setup(config_update, model):
+    with open(THIS_DIR + '/test_cz_sim.yml') as f:
+        config = yaml.safe_load(f)
+    if config_update is not None:
+        for param, update in config_update.items():
+            config[param].update(update)
+
     # simulation
-    sim = opencg.sim.ElmerSimulation(config, phase_change=True, transient=False, heat_control=True)
-
-    # solvers
-    sim.set_equations(heat=True, induction=True, probes=True)
-    
-    # materials
-    mat_crucible = sim.add_material('graphite-CZ3R6300')
-    mat_melt = sim.add_material('tin-liquid')
-    mat_crystal = sim.add_material('tin-solid')
-    mat_inductor = sim.add_material('copper-coil')
-    mat_air = sim.add_material('air')
-
+    sim = opencg.sim.ElmerSimulationCz(**config['general'],
+                                       probes=config['probes'],
+                                       heating=config['heating_induction'],
+                                       smart_heater=config['smart-heater'])
     # forces
-    frc_current = sim.add_current(model['inductor'])
-    frc_joule_heat = sim.joule_heat
+    joule_heat = sim.joule_heat
 
     # bodies
-    sim.add_crystal(model['crystal'], mat_crystal, frc_joule_heat)
-    sim.add_body(model['crucible'], mat_crucible, frc_joule_heat)
-    sim.add_body(model['melt'], mat_melt, frc_joule_heat)
-    sim.add_body(model['inductor'], mat_inductor, frc_current)
-    sim.add_body(model['air'], mat_air)
+    sim.add_crystal(model['crystal'], force=joule_heat)
+    sim.add_inductor(model['inductor'])
+    sim.add_body(model['crucible'], force=joule_heat)
+    sim.add_body(model['melt'], force=joule_heat)
+    sim.add_body(model['air'])
 
     # phase interface
-    sim.add_phase_interface(model['if_melt_crystal'])
+    sim.add_phase_interface(model['if_melt_crystal'], model['crystal'])
 
     # boundaries
-    sim.add_radiation_boundary(model['if_crucible_air'])
-    sim.add_radiation_boundary(model['if_crystal_air'])
-    sim.add_radiation_boundary(model['if_melt_air'])
-    sim.add_radiation_boundary(model['if_inductor_air'])
-    sim.add_temperature_boundary(model['bnd_air_outside'], 273.15)
-    # TODO Heat Transfer Coefficients
+    sim.add_radiation_boundary(model['if_crucible_air'], htc=10, rad_s2s=False)
+    sim.add_radiation_boundary(model['if_crystal_air'], rad_s2s=False)
+    sim.add_radiation_boundary(model['if_melt_air'], rad_s2s=False)
+    sim.add_radiation_boundary(model['if_inductor_air'], rad_s2s=False)
+    sim.add_heatflux_boundary(model['bnd_air_outside'], 273.15)
 
     # export
     sim.export()
@@ -104,9 +105,6 @@ if __name__ == "__main__":
 
     with open('./examples/config.yml') as f:
         config = yaml.safe_load(f)
-    model = geometry(config)
+    model = geometry(config['geometry'])
     run_elmer_grid('./simdata/_test/', 'cz_induction.msh')
-    elmer_setup(config, model)
-    run_elmer_solver('./simdata/_test/')
-    err, warn, stats = scan_logfile('./simdata/_test/')
-    print(err, warn, stats)
+    elmer_setup(config['simulation'], model)

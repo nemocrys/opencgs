@@ -5,7 +5,28 @@ air:
   Heat Conductivity: 25.873e-3  # 20°C
   Relative Permeability: 1
   Relative Permittivity: 1
-copper-coil:
+bismuth-liquid:
+  Density: 10050
+  Electric Conductivity: 7.68e+5
+  Emissivity: 0.366  # set equal to solid
+  Heat Capacity: 146.3
+  Heat Conductivity: 10.23
+  Relative Permeability: 1
+  Relative Permittivity: 1
+  Liquid: 'Logical True'
+  Surface Tension: 0.378
+bismuth-solid:
+  Density: 9832
+  Electric Conductivity: 3.44e+5
+  Emissivity: 0.366
+  Heat Capacity: 147
+  Heat Conductivity: 7.5
+  Relative Permeability: 1
+  Relative Permittivity: 1
+  Solid: 'Logical True'
+  Melting Point: 544.1
+  Latent Heat: 5.21e+4  # J / kg
+copper-inductor:
   Density: 8960.0  # 20°C
   Electric Conductivity: 0.0  # necessary for 2D
   Emissivity: 0.2  # 327°C
@@ -61,8 +82,8 @@ tin-liquid:
   Relative Permeability: 1
   Relative Permittivity: 1
   Liquid: 'Logical True'
-  # Surface Tension: 0.56
-  # Beta: 10  # Deg
+  Surface Tension: 0.56
+  Beta: 10  # Deg
 tin-solid:
   Density: 7179.0
   Electric Conductivity: 4.38e+6
@@ -74,24 +95,10 @@ tin-solid:
   Solid: 'Logical True'
   Melting Point: 505
   Latent Heat: 5.96e+4  # J / kg
-bismuth-liquid:
-  Density: 10050
-  Electric Conductivity: 7.68e+5
-  Emissivity: 0.366  # set equal to solid
-  Heat Capacity: 146.3
-  Heat Conductivity: 10.23
+vacuum:  # equals air with reduced density, conductivity # TODO proper params
+  Density: 1.1885e-9
+  Electric Conductivity: 0.0 
+  Heat Capacity: 1006.4
+  Heat Conductivity: 1.0e-10
   Relative Permeability: 1
   Relative Permittivity: 1
-  Liquid: 'Logical True'
-  Surface Tension: 0.378
-bismuth-solid:
-  Density: 9832
-  Electric Conductivity: 3.44e+5
-  Emissivity: 0.366
-  Heat Capacity: 147
-  Heat Conductivity: 7.5
-  Relative Permeability: 1
-  Relative Permittivity: 1
-  Solid: 'Logical True'
-  Melting Point: 544.1
-  Latent Heat: 5.21e+4  # J / kg
