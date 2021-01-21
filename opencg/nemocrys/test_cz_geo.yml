@@ -1,6 +1,6 @@
 # Base configuration of test cz geometry
 mesh:
-  char-length-factor: 1 
+  size_factor: 1 
   order: 2
 
 axis_bt:

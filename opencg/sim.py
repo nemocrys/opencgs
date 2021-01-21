@@ -1,7 +1,10 @@
 import os
+import yaml
 import numpy as np
 import pyelmer.elmer as elmer
 
+from dataclasses import asdict
+from opencg.post import HeatfluxSurf
 
 SOLVER_FILE = os.path.dirname(os.path.realpath(__file__)) + '/data/solvers.yml'  # TODO path independent
 MATERIAL_FILE = os.path.dirname(os.path.realpath(__file__)) + '/data/materials.yml'
@@ -9,12 +12,13 @@ MATERIAL_FILE = os.path.dirname(os.path.realpath(__file__)) + '/data/materials.y
 
 class ElmerSimulationCz:
     def __init__(self, heat_control, heat_convection, heating_induction, phase_change, transient,
-                 heating, v_pull=0, smart_heater={}, probes={}):
+                 heating, sim_dir, v_pull=0, smart_heater={}, probes={}):
         self.heat_control = heat_control
         self.heat_convection = heat_convection
         self.heating_induction = heating_induction
         self.phase_change = phase_change
         self.transient = transient
+        self.sim_dir = sim_dir
         self.v_pull = v_pull
         if transient or phase_change:
             self.mesh_update = True
@@ -36,9 +40,18 @@ class ElmerSimulationCz:
             self.smart_heater = smart_heater
             self._set_joule_heat()
         else:
-            pass # TODO heating body force
+            pass # TODO resistance heating body force
 
         self._crystal = None
+        self._heat_flux_dict = {}
+
+    def __getitem__(self, name):
+        for body in self.sim.bodies:
+            if body == name:
+                return self.sim.bodies[name]
+        for boundary in self.sim.boundaries:
+            if boundary == name:
+                return self.sim.boundaries[name]
 
     def _set_equations(self):
         # solvers
@@ -100,6 +113,20 @@ class ElmerSimulationCz:
     def joule_heat(self):
         return self._joule_heat
 
+    @property
+    def movement(self):
+        if self.transient:
+            return [0, f'Variable Time\n    real MATC "{self.v_pull / 6e4 }*tx"']
+        else:
+            return [0, 0]
+
+    @property
+    def distortion(self):
+        if self.transient:
+            return [0, None]
+        else:
+            return [0, 0]
+
     def add_crystal(self, shape, material='', force=None):
         self._crystal = self.add_body(shape, material, force)
 
@@ -120,7 +147,7 @@ class ElmerSimulationCz:
             body.body_force = force
         return body
 
-    def add_radiation_boundary(self, shape, mesh_update=[0, 0], htc=0, T_ext=293.15, 
+    def add_radiation_boundary(self, shape, movement=[0, 0], htc=0, T_ext=293.15, 
                                rad_s2s=True):
         boundary = elmer.Boundary(self.sim, shape.name, [shape.ph_id])
         if rad_s2s:
@@ -133,21 +160,24 @@ class ElmerSimulationCz:
             boundary.heat_transfer_coefficient = htc
             boundary.T_ext = T_ext
         if self.mesh_update:
-            boundary.mesh_update = mesh_update
+            boundary.mesh_update = movement
         return boundary
 
-    def add_temperature_boundary(self, shape, T, mesh_update=[0, 0]):
+    def add_temperature_boundary(self, shape, T, movement=[0, 0]):
         boundary = elmer.Boundary(self.sim, shape.name, [shape.ph_id])
         boundary.save_scalars = True
         boundary.fixed_temperature = T
         if self.mesh_update:
-            boundary.mesh_update = mesh_update
+            boundary.mesh_update = movement
         return boundary
 
-    def add_heatflux_boundary(self, shape, heatflux, mesh_update=[0, 0]):
+    def add_heatflux_boundary(self, shape, heatflux, movement=[0, 0]):
         boundary = elmer.Boundary(self.sim, shape.name, [shape.ph_id])
         boundary.save_scalars = True
         boundary.fixed_heatflux = heatflux
+        if self.mesh_update:
+            boundary.mesh_update = mesh_update
+        return boundary
 
     def add_material(self, name, setup_file=''):
         if name in self.sim.materials:
@@ -192,7 +222,23 @@ class ElmerSimulationCz:
             bc_phase_if.material = self._crystal.material
             bc_phase_if.phase_change_body = phase_if
 
+    def add_interface(self, shape, movement=[0, 0]):
+        boundary = elmer.Boundary(self.sim, shape.name, [shape.ph_id])
+        boundary.save_scalars = True
+        if self.mesh_update:
+            boundary.mesh_update = movement
+
     def export(self):
-        self.sim.write_startinfo('./simdata/_test/')
-        self.sim.write_sif('./simdata/_test/')
-        self.sim.write_boundary_ids('./simdata/_test/')
+        self.sim.write_startinfo(self.sim_dir)
+        self.sim.write_sif(self.sim_dir)
+        self.sim.write_boundary_ids(self.sim_dir)
+        with open(self.sim_dir + '/post_processing.yml', 'w') as f:
+            yaml.dump(self._heat_flux_dict, f)
+        with open(self.sim_dir + '/probes.yml', 'w') as f:
+            yaml.dump(self.probes, f, sort_keys=False)
+
+    def heat_flux_computation(self, body, boundary):
+        # TODO that's a way too complicated!
+        hfs = HeatfluxSurf(boundary.surface_ids[0], body.body_ids, body.material.data['Heat Conductivity'])
+        self._heat_flux_dict.update({f'{body.name}_{boundary.name}': asdict(hfs)})
+        

@@ -1,5 +1,6 @@
 import numpy as np
 import os
+import sys
 import yaml
 
 import pyelmer.elmer as elmer
@@ -12,7 +13,8 @@ import opencg.geo.czochralski as cz
 # TODO logging
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 
-def geometry(config_update, dim=2):
+def geometry(config_update, dim=2, visualize=False, sim_dir='./simdata/_test',
+             name='cz_induction'):
     # load base configuration
     with open(THIS_DIR + '/test_cz_geo.yml') as f:
         config = yaml.safe_load(f)
@@ -21,7 +23,7 @@ def geometry(config_update, dim=2):
             config[body].update(update)
 
     # initialize geometry model
-    model = Model('cz-induction')
+    model = Model(name)
 
     # geometry
     crucible = cz.crucible(model, dim, **config['crucible'])
@@ -90,16 +92,18 @@ def geometry(config_update, dim=2):
     MeshControlExponential(model, if_crucible_melt, melt.mesh_size / 5, exp=1.6, fact=3)
     MeshControlExponential(model, inductor, inductor.mesh_size)
     MeshControlExponential(model, bnd_crucible_outside, crucible.mesh_size / 3, exp=1.6, fact=3)
-    model.generate_mesh()
+    model.generate_mesh(**config['mesh'])
 
-    # visualize
-    # model.show()
-    model.write_msh('./simdata/_test/cz_induction.msh')
+    if visualize:
+        model.show()
+    model.write_msh(f'{sim_dir}/{name}.msh')
     print(model)
     return model
 
 
-def elmer_setup(config_update, model):
+def elmer_setup(config_update, model, sim_dir='./simdata/_test', name='cz_induction',
+                visualize=False):
+    # TODO visualization of the setup
     with open(THIS_DIR + '/test_cz_sim.yml') as f:
         config = yaml.safe_load(f)
     if config_update is not None:
@@ -107,8 +111,7 @@ def elmer_setup(config_update, model):
             config[param].update(update)
 
     # simulation
-    sim = opencg.sim.ElmerSimulationCz(**config['general'],
-                                       probes=config['probes'],
+    sim = opencg.sim.ElmerSimulationCz(**config['general'], sim_dir=sim_dir, probes=config['probes'],
                                        heating=config['heating_induction'],
                                        smart_heater=config['smart-heater'])
 
@@ -131,33 +134,50 @@ def elmer_setup(config_update, model):
     # phase interface
     sim.add_phase_interface(model['if_melt_crystal'], model['crystal'])
 
-    # boundaries
-    sim.add_radiation_boundary(model['bnd_crystal'], **config['boundaries']['crystal'])
-    sim.add_radiation_boundary(model['bnd_melt'], **config['boundaries']['melt'])
+    # boundaries with convection
     sim.add_radiation_boundary(model['bnd_crucible_outside'], **config['boundaries']['crucible_outside'])
+    sim.add_radiation_boundary(model['bnd_melt'], **config['boundaries']['melt'])
+    sim.add_radiation_boundary(model['bnd_crystal'], **config['boundaries']['crystal'], movement=sim.distortion)
+    # moving boundaries
+    sim.add_radiation_boundary(model['bnd_axtop'], movement=sim.distortion)
+    # stationary boundaries
     for bnd in ['bnd_crucible_bt', 'bnd_ins', 'bnd_adp', 'bnd_axbt', 'bnd_vessel_inside',
-                'bnd_inductor_outside', 'bnd_seed', 'bnd_axtop']:
+                'bnd_inductor_outside', 'bnd_seed']:
         sim.add_radiation_boundary(model[bnd])
+    # stationary interfaces
     for bnd in ['if_crucible_melt', 'if_axtop_vessel', 'if_crucible_ins', 'if_ins_adp',
                 'if_adp_axbt', 'if_axbt_vessel']:
-        pass  # TODO add_interface()
+        sim.add_interface(model[bnd])
+    # moving interfaces
     for bnd in ['if_crystal_seed', 'if_seed_axtop']:
-        pass
+        sim.add_interface(model[bnd], sim.movement)
+    # outside boundaries
     sim.add_temperature_boundary(model['bnd_inductor_inside'], **config['boundaries']['inductor_inside'])
     sim.add_temperature_boundary(model['bnd_vessel_outside'], **config['boundaries']['vessel_outside'])
 
+    # heat flux computation
+    # TODO automatize this
+    sim.heat_flux_computation(sim['crucible'], sim['bnd_crucible_outside'])
+    sim.heat_flux_computation(sim['crucible'], sim['bnd_crucible_bt'])
+    sim.heat_flux_computation(sim['crucible'], sim['if_crucible_melt'])
+    sim.heat_flux_computation(sim['crucible'], sim['if_crucible_ins'])
+
     # export
+    # TODO write metadata (git hash, ...)
     sim.export()
-    # TODO export post-processing information
 
     return sim
 
 if __name__ == "__main__":
-    from pyelmer.execute import run_elmer_grid, run_elmer_solver
-    from pyelmer.post import scan_logfile
-
-    with open('./examples/config.yml') as f:
+    # This is a workaround to execute the functions in here using
+    # a python call instead of importing it. It is required because
+    # of a Gmsh bug on Windows, that seems to destroy the path
+    # environment.
+    if len(sys.argv) == 2:
+        config_file = sys.argv[1]
+    else:
+        config_file = './examples/config.yml'
+    with open(config_file) as f:
         config = yaml.safe_load(f)
-    model = geometry(config['geometry'])
-    run_elmer_grid('./simdata/_test/', 'cz_induction.msh')
-    elmer_setup(config['simulation'], model)
+    model = geometry(config['geometry'], **config['general'])
+    elmer_setup(config['simulation'], model, **config['general'])

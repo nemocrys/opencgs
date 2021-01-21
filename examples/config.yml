@@ -1,7 +1,11 @@
-# simulation configuration
+general:
+  name: cz_induction
+  sim_dir: './simdata/_test'  # will be replaced by control
+  visualize: False
+
+control:
+  setup: 'opencg/nemocrys/test_cz_induction.py'
+
 geometry:
-  # inductor:
-  #   g: 0.02  # guessed
+
 simulation:
-  heating_induction:
-    current: 50
