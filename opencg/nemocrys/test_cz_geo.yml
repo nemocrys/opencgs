@@ -4,74 +4,64 @@ mesh:
   order: 2
 
 axis_bt:
-  r_in: 0.005
-  r_out: 0.02
-  h: 0.02
+  r_in: 0.0075  # measured
+  r_out: 0.02  # measured
+  h: 0.029 # variable
   T_init: 323.15
   material: 'steel-1.4541'
-
 axis_top:
-  r: 0.01
+  r: 0.01  # measured
   T_init: 303.15
   material: 'steel-1.4541'
-
 crucible:
-  h: 0.05
-  r_in: 0.05
-  r_out: 0.06
-  t_bt: 0.01
+  h: 0.05  # drawing
+  r_in: 0.05  # drawing
+  r_out: 0.06  # drawing
+  t_bt: 0.01  # drawing
   T_init: 520
   material: graphite-CZ3R6300
-
 crucible_adapter:
-  r_in_top: 0.01
-  r_in_bt: 0.02
-  r_out: 0.03
-  h_top: 0.01
-  h_bt: 0.01
+  r_in_top: 0.01  # drawing
+  r_in_bt: 0.02  # drawing
+  r_out: 0.06  # drawing
+  h_top: 0.0045  # drawing
+  h_bt: 0.015  # drawing
   T_init: 313.15
   material: graphite-CZ3R6300
-
 crystal:
   l: 0.05  # variable
   r: 0.004  # variable
   T_init: 490
   material: tin-solid
-
 filling:
   T_init: 353.15
   material: air
-
 inductor:
-  d: 0.01  # guessed
-  d_in: 0.008  # guessed
-  g: 0.006  # guessed
+  d: 0.01  # construction
+  d_in: 0.008  # construction
+  g: 0.006  # averaged
   n: 3
-  X0: [0.075, -0.01]
+  X0: [0.075, -0.005]  # measured
   T_init: 293.15
   material: copper-inductor
-
 insulation:
-  r_in: 0.01
-  r_out: 0.05
-  h: 0.02
+  r_in: 0.01  # drawing
+  r_out: 0.06  # drawing
+  h: 0.025  # drawing
   T_init: 450
   material: 'insulation'
-
 melt:
-  h: 0.025  # variable
+  h: 0.03  # variable
   T_init: 506
   material: tin-liquid
-
 seed:
-  r: 0.001
-  l: 0.04
+  r: 0.001  # estimated
+  l: 0.04  # estimated
   T_init: 420
   material: tin-solid
-
 vessel:
-  r_in: 0.14
-  h_in: 0.3
-  t: 0.01
+  r_in: 0.1315
+  h_in: 0.383
+  t: 0.005
   T_init: 293.15
   material: 'steel-1.4541'

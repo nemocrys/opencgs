@@ -6,6 +6,22 @@ general:
   transient: False
   v_pull: 4  # mm/min
 
+boundaries:
+  crucible_outside:
+    htc: 6.5 # according to MMS Study
+    T_ext: 293.15
+  crystal:
+    htc: 10
+    T_ext: 293.15
+  melt:
+    htc: 10
+    T_ext: 293.15
+  inductor_inside:
+    T: 293.15
+  vessel_outside:
+    T: 293.15
+
+# TODO implement transient
 transient:
   dt: 0.1
   dt-out: 10
@@ -23,6 +39,7 @@ heating_induction:
 heating_resistance:
   power: 100
 
+# TODO wrong control point
 smart-heater:
   T: 505  # melting point tin
   control-point: False  # if False: use T at melt-crystal interface (triple point)
@@ -30,22 +47,14 @@ smart-heater:
   y: 0.02
   z: 0.0
 
-heat-convection:
-  factor: 1
-  melt: 10  # 11.11
-  crystal: 10  # 11.74
-  crucible-top: 10  # 9.71
-  crucible-inside: 10  # 16.16
-  crucible-outside: 6.5  # according to MMS Study  # 9.56
-  heater: 10  # guessed
-  T-ext: 293.15
-
+# TODO implement fast-sim
 fast-simulation:
   Steady State Max Iterations: 3
   Steady State Convergence Tolerance: 1.e-6
   Nonlinear System Convergence Tolerance: 1.0e-4
   Linear System Convergence Tolerance: 1.e-9
 
+# TODO update probes
 probes:
   crc-bt: [0.0, -0.01]
   crc-top: [0.055, 0.04]
