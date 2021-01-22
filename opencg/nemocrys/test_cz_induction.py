@@ -14,7 +14,7 @@ import opencg.geo.czochralski as cz
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 
 def geometry(config_update, dim=2, visualize=False, sim_dir='./simdata/_test',
-             name='cz_induction'):
+             name='cz_induction', **kwargs):
     # load base configuration
     with open(THIS_DIR + '/test_cz_geo.yml') as f:
         config = yaml.safe_load(f)
@@ -46,10 +46,18 @@ def geometry(config_update, dim=2, visualize=False, sim_dir='./simdata/_test',
 
     # boundaries
     bnd_melt = Shape(model, dim - 1, 'bnd_melt', melt.get_interface(filling))
-    bnd_crystal = Shape(model, dim - 1, 'bnd_crystal', crystal.get_interface(filling))
     bnd_seed = Shape(model, dim - 1, 'bnd_seed', seed.get_interface(filling))
-    bnd_axtop = Shape(model, dim -1, 'bnd_axtop', ax_top.get_interface(filling))
-    
+    # split up the boundaries of crystal, seed, ax_top for movement
+    bnd_crystal_side = Shape(model, dim - 1, 'bnd_crystal_side', crystal.get_interface(filling))
+    bnd_crystal_top = Shape(model, dim -1, 'bnd_crystal_top', crystal.get_boundaries_in_box(
+        [seed.params.r, crystal.params.r], [crystal.params.X0[1] + crystal.params.l, crystal.params.X0[1] + crystal.params.l]
+    ))
+    bnd_crystal_side -= bnd_crystal_top
+    bnd_axtop_side = Shape(model, dim -1, 'bnd_axtop_side', ax_top.get_interface(filling))
+    bnd_axtop_bt = Shape(model, dim - 1, 'bnd_axtop_bt', ax_top.get_boundaries_in_box(
+        [seed.params.r, ax_top.params.r], [ax_top.params.X0[1], ax_top.params.X0[1]]
+    ))
+    bnd_axtop_side -= bnd_axtop_bt
     bnd_crucible_bt = Shape(model, dim - 1, 'bnd_crucible_bt', crucible.get_boundaries_in_box(
         [0, ins.params.r_in], [crucible.params.X0[1], crucible.params.X0[1]]
     ))
@@ -101,9 +109,8 @@ def geometry(config_update, dim=2, visualize=False, sim_dir='./simdata/_test',
     return model
 
 
-def elmer_setup(config_update, model, sim_dir='./simdata/_test', name='cz_induction',
-                visualize=False):
-    # TODO visualization of the setup
+def elmer_setup(config_update, model, sim_dir='./simdata/_test', **kwargs):
+    # TODO visualization?
     with open(THIS_DIR + '/test_cz_sim.yml') as f:
         config = yaml.safe_load(f)
     if config_update is not None:
@@ -111,9 +118,11 @@ def elmer_setup(config_update, model, sim_dir='./simdata/_test', name='cz_induct
             config[param].update(update)
 
     # simulation
-    sim = opencg.sim.ElmerSimulationCz(**config['general'], sim_dir=sim_dir, probes=config['probes'],
+    sim = opencg.sim.ElmerSimulationCz(**config['general'], sim_dir=sim_dir,
+                                       probes=config['probes'],
                                        heating=config['heating_induction'],
-                                       smart_heater=config['smart-heater'])
+                                       smart_heater=config['smart-heater'],
+                                       transient_setup=config['transient'])
 
     # forces
     joule_heat = sim.joule_heat
@@ -134,23 +143,26 @@ def elmer_setup(config_update, model, sim_dir='./simdata/_test', name='cz_induct
     # phase interface
     sim.add_phase_interface(model['if_melt_crystal'], model['crystal'])
 
-    # boundaries with convection
+    # boundaries with convection (+ movement)
     sim.add_radiation_boundary(model['bnd_crucible_outside'], **config['boundaries']['crucible_outside'])
     sim.add_radiation_boundary(model['bnd_melt'], **config['boundaries']['melt'])
-    sim.add_radiation_boundary(model['bnd_crystal'], **config['boundaries']['crystal'], movement=sim.distortion)
+    sim.add_radiation_boundary(model['bnd_crystal_side'], **config['boundaries']['crystal'], movement=sim.distortion)
+    sim.add_radiation_boundary(model['bnd_crystal_top'], **config['boundaries']['crystal'], movement=sim.movement)
     # moving boundaries
-    sim.add_radiation_boundary(model['bnd_axtop'], movement=sim.distortion)
+    sim.add_radiation_boundary(model['bnd_seed'], movement=sim.movement)
+    sim.add_radiation_boundary(model['bnd_axtop_bt'], movement=sim.movement)
+    sim.add_radiation_boundary(model['bnd_axtop_side'], movement=sim.distortion)
+    # moving interfaces
+    sim.add_interface(model['if_crystal_seed'], sim.movement)
+    sim.add_interface(model['if_seed_axtop'], sim.movement)
     # stationary boundaries
     for bnd in ['bnd_crucible_bt', 'bnd_ins', 'bnd_adp', 'bnd_axbt', 'bnd_vessel_inside',
-                'bnd_inductor_outside', 'bnd_seed']:
+                'bnd_inductor_outside']:
         sim.add_radiation_boundary(model[bnd])
     # stationary interfaces
     for bnd in ['if_crucible_melt', 'if_axtop_vessel', 'if_crucible_ins', 'if_ins_adp',
                 'if_adp_axbt', 'if_axbt_vessel']:
         sim.add_interface(model[bnd])
-    # moving interfaces
-    for bnd in ['if_crystal_seed', 'if_seed_axtop']:
-        sim.add_interface(model[bnd], sim.movement)
     # outside boundaries
     sim.add_temperature_boundary(model['bnd_inductor_inside'], **config['boundaries']['inductor_inside'])
     sim.add_temperature_boundary(model['bnd_vessel_outside'], **config['boundaries']['vessel_outside'])

@@ -3,7 +3,7 @@ general:
   heat_convection: True
   heating_induction: True
   phase_change: True
-  transient: False
+  transient: True
   v_pull: 4  # mm/min
 
 boundaries:
@@ -24,7 +24,7 @@ boundaries:
 # TODO implement transient
 transient:
   dt: 0.1
-  dt-out: 10
+  dt-out: 1
   t-max: 10
   restart: False
   restart-file: case.result

@@ -12,7 +12,7 @@ MATERIAL_FILE = os.path.dirname(os.path.realpath(__file__)) + '/data/materials.y
 
 class ElmerSimulationCz:
     def __init__(self, heat_control, heat_convection, heating_induction, phase_change, transient,
-                 heating, sim_dir, v_pull=0, smart_heater={}, probes={}):
+                 heating, sim_dir, v_pull=0, smart_heater={}, probes={}, transient_setup={}):
         self.heat_control = heat_control
         self.heat_convection = heat_convection
         self.heating_induction = heating_induction
@@ -20,13 +20,16 @@ class ElmerSimulationCz:
         self.transient = transient
         self.sim_dir = sim_dir
         self.v_pull = v_pull
-        if transient or phase_change:
+        if phase_change:
+            self.mesh_update = True
+        elif transient and transient_setup['mesh-movement']:
             self.mesh_update = True
         else:
             self.mesh_update = False
 
         if transient:
-            self.sim = elmer.load_simulation('axi-symmetric_transient')
+            self.sim = self._setup_transient_sim(transient_setup)
+            self.transient_setup = transient_setup
         else:
             self.sim = elmer.load_simulation('axi-symmetric_steady')
 
@@ -60,6 +63,8 @@ class ElmerSimulationCz:
             solver_statmag = elmer.load_solver('StatMagSolver', self.sim, SOLVER_FILE)
             solver_statmag.data.update({'Angular Frequency': omega})
         solver_heat = elmer.load_solver('HeatSolver', self.sim, SOLVER_FILE)
+        if self.transient and self.heat_control:
+            solver_heat.data.update({'Smart Heater Time Scale': self.transient_setup['smart-heater-t']})
         if self.phase_change:
             if self.transient:
                 solver_phase_change = elmer.load_solver('TransientPhaseChange', self.sim, SOLVER_FILE)
@@ -108,6 +113,18 @@ class ElmerSimulationCz:
                                                          self.smart_heater['z']]
                 joule_heat.smart_heater_T = self.smart_heater['T']
         self._joule_heat = joule_heat
+
+    def _setup_transient_sim(self, config):
+        sim = elmer.load_simulation('axi-symmetric_transient')
+        sim.settings.update({'Timestep Sizes': config['dt']})
+        sim.settings.update({'Output Intervals': round(config['dt-out'] / config['dt'])})
+        sim.settings.update({'Timestep Intervals': round(config['t-max'] / config['dt'])})
+        if config['restart']:
+            sim.settings.update({'Restart File': config['restart-file']})
+            sim.settings.update({'Restart Time': config['restart-time']})
+            sim.settings.update({'Restart Variable 1': 'Temperature'})
+            sim.settings.update({'Restart Variable 2': 'PhaseSurface'})
+        return sim
 
     @property
     def joule_heat(self):
