@@ -4,7 +4,7 @@ general:
   visualize: False
 
 control:
-  setup: 'opencg/nemocrys/test_cz_induction.py'
+  setup: './examples/cz_test/setup.py'
 
 geometry:
   mesh:
@@ -12,3 +12,5 @@ geometry:
     order: 1
 
 simulation:
+  general:
+    transient: true

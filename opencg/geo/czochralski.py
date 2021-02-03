@@ -102,7 +102,7 @@ def melt(model, dim, crucible, h, char_l=0, T_init=273.15, material='', name='me
     melt.set_interface(crucible)
     return melt
 
-def crystal(model, dim, r, l, char_l=0, T_init=273.15, material='', melt=None, name='crystal'):
+def crystal(model, dim, r, l, char_l=0, T_init=273.15, X0=[0, 0], material='', melt=None, name='crystal'):
     crys = Shape(model, dim, name)
     crys.params.r = r
     crys.params.l = l
@@ -114,7 +114,8 @@ def crystal(model, dim, r, l, char_l=0, T_init=273.15, material='', melt=None, n
         crys.mesh_size = char_l
 
     if melt is None:  # detached crystal
-        pass
+        crys.params.X0 = X0
+        crys.geo_ids = [cylinder(X0[0], X0[1], 0, r, l, dim)]
     else:  # in contact with melt
         crys.params.X0 = [0, melt.params.X0[1] + melt.params.h_meniscus]
         crys.geo_ids = [cylinder(0, crys.params.X0[1], 0, r, l, dim)]
@@ -122,7 +123,7 @@ def crystal(model, dim, r, l, char_l=0, T_init=273.15, material='', melt=None, n
 
     return crys
 
-def inductor(model, dim, d, d_in, g, n, X0, char_l=0, T_init=273.15, material='', name='inductor'):
+def inductor(model, dim, d, d_in, X0, g=0, n=1, char_l=0, T_init=273.15, material='', name='inductor'):
     # X0: center of bottom winding
     ind = Shape(model, dim, name)
     ind.params.d = d

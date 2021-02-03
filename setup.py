@@ -14,7 +14,7 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type='text/markdown',
     url='https://github.com/nemocrys/opencg',
-    packages=['opencg', 'opencg.geometry', 'opencg.test'],
+    packages=['opencg', 'opencg.geo', 'opencg.test'],
     include_package_data=True,
     package_data={'': ['data/*.yml']},
     classifiers=[

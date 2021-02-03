@@ -14,9 +14,9 @@ import opencg.geo.czochralski as cz
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 
 def geometry(config_update, dim=2, visualize=False, sim_dir='./simdata/_test',
-             name='cz_induction', **kwargs):
+             name='cz_induction', config_geo='config_geo.yml', **kwargs):
     # load base configuration
-    with open(THIS_DIR + '/test_cz_geo.yml') as f:
+    with open(THIS_DIR + '/' + config_geo) as f:
         config = yaml.safe_load(f)
     if config_update is not None:
         for body, update in config_update.items():
@@ -76,6 +76,7 @@ def geometry(config_update, dim=2, visualize=False, sim_dir='./simdata/_test',
     bnd_inductor_outside = Shape(model, dim - 1, 'bnd_inductor_outside', inductor.get_interface(filling))
     bnd_inductor_inside = Shape(model, dim - 1, 'bnd_inductor_inside', inductor.get_interface(filling_in_inductor))
     model.remove_shape(filling_in_inductor)
+    bnd_symmetry_axis = Shape(model, dim - 1, 'bnd_symmetry_axis', model.symmetry_axis)
 
     # interfaces
     if_crucible_melt = Shape(model, dim - 1, 'if_crucible_melt', crucible.get_interface(melt))
@@ -109,9 +110,10 @@ def geometry(config_update, dim=2, visualize=False, sim_dir='./simdata/_test',
     return model
 
 
-def elmer_setup(config_update, model, sim_dir='./simdata/_test', **kwargs):
+def elmer_setup(config_update, model, sim_dir='./simdata/_test', config_sim='config_sim.yml',
+                **kwargs):
     # TODO visualization?
-    with open(THIS_DIR + '/test_cz_sim.yml') as f:
+    with open(THIS_DIR + '/' + config_sim) as f:
         config = yaml.safe_load(f)
     if config_update is not None:
         for param, update in config_update.items():
@@ -167,6 +169,9 @@ def elmer_setup(config_update, model, sim_dir='./simdata/_test', **kwargs):
     sim.add_temperature_boundary(model['bnd_inductor_inside'], **config['boundaries']['inductor_inside'])
     sim.add_temperature_boundary(model['bnd_vessel_outside'], **config['boundaries']['vessel_outside'])
 
+    # symmetry axis
+    sim.add_interface(model['bnd_symmetry_axis'], sim.distortion)
+
     # heat flux computation
     # TODO automatize this
     sim.heat_flux_computation(sim['crucible'], sim['bnd_crucible_outside'])
@@ -188,7 +193,7 @@ if __name__ == "__main__":
     if len(sys.argv) == 2:
         config_file = sys.argv[1]
     else:
-        config_file = './examples/config.yml'
+        config_file = './examples/cz_test/config.yml'
     with open(config_file) as f:
         config = yaml.safe_load(f)
     model = geometry(config['geometry'], **config['general'])

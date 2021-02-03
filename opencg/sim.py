@@ -22,14 +22,17 @@ class ElmerSimulationCz:
         self.v_pull = v_pull
         if phase_change:
             self.mesh_update = True
-        elif transient and transient_setup['mesh-movement']:
+        elif transient:
             self.mesh_update = True
         else:
             self.mesh_update = False
 
         if transient:
-            self.sim = self._setup_transient_sim(transient_setup)
-            self.transient_setup = transient_setup
+            self.sim = self._setup_transient_sim(**transient_setup)
+            try:
+                self.smart_heater_t = transient_setup['smart_heater_t']
+            except KeyError:
+                self.smart_heater_t = 1
         else:
             self.sim = elmer.load_simulation('axi-symmetric_steady')
 
@@ -114,14 +117,15 @@ class ElmerSimulationCz:
                 joule_heat.smart_heater_T = self.smart_heater['T']
         self._joule_heat = joule_heat
 
-    def _setup_transient_sim(self, config):
+    def _setup_transient_sim(self, dt, dt_out, t_max, smart_heater_t, restart=False,
+                             restart_file='', restart_time=0):
         sim = elmer.load_simulation('axi-symmetric_transient')
-        sim.settings.update({'Timestep Sizes': config['dt']})
-        sim.settings.update({'Output Intervals': round(config['dt-out'] / config['dt'])})
-        sim.settings.update({'Timestep Intervals': round(config['t-max'] / config['dt'])})
-        if config['restart']:
-            sim.settings.update({'Restart File': config['restart-file']})
-            sim.settings.update({'Restart Time': config['restart-time']})
+        sim.settings.update({'Timestep Sizes': dt})
+        sim.settings.update({'Output Intervals': round(dt_out / dt)})
+        sim.settings.update({'Timestep Intervals': round(t_max / dt)})
+        if restart:
+            sim.settings.update({'Restart File': restart_file})
+            sim.settings.update({'Restart Time': restart_time})
             sim.settings.update({'Restart Variable 1': 'Temperature'})
             sim.settings.update({'Restart Variable 2': 'PhaseSurface'})
         return sim
@@ -193,7 +197,7 @@ class ElmerSimulationCz:
         boundary.save_scalars = True
         boundary.fixed_heatflux = heatflux
         if self.mesh_update:
-            boundary.mesh_update = mesh_update
+            boundary.mesh_update = movement
         return boundary
 
     def add_material(self, name, setup_file=''):
