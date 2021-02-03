@@ -34,7 +34,7 @@ def crucible(model, dim, h, r_in, r_out, t_bt, char_l=0, T_init=273.15, material
     return crc
     
 def melt(model, dim, crucible, h, char_l=0, T_init=273.15, material='', name='melt',
-         crystal_radius=0, rho=0, gamma=0, beta=0, g=9.81, res=100):
+         crystal_radius=0, phase_if= None, rho=0, gamma=0, beta=0, g=9.81, res=100):
     melt = Shape(model, dim, name)
     melt.params.h = h
     melt.params.T_init = T_init
@@ -45,7 +45,7 @@ def melt(model, dim, crucible, h, char_l=0, T_init=273.15, material='', name='me
     else:
         melt.mesh_size = char_l
 
-    if crystal_radius == 0:  # no meniscus
+    if crystal_radius == 0:  # no meniscus, no phase interface
         melt.params.h_meniscus = melt.params.h
         melt.geo_ids = [cylinder(0, 0, 0, crucible.params.r_in, h, dim)]
     else:  # with meniscus, following Landau87
@@ -77,15 +77,23 @@ def melt(model, dim, crucible, h, char_l=0, T_init=273.15, material='', name='me
         melt.params.h_meniscus = meniscus_y.max()
         meniscus_points = [factory.addPoint(meniscus_x[i], meniscus_y[i], 0)
                            for i in range(len(meniscus_x))]
+        if phase_if is not None:
+            meniscus_points[-1] = phase_if.params.x_end
         melt_meniscus = factory.addSpline(meniscus_points)
-        top_left = factory.addPoint(0, meniscus_y.max(), 0)
+        if phase_if is not None:
+            top_left = phase_if.params.x_start
+        else:
+            top_left = factory.addPoint(0, meniscus_y.max(), 0)
         bottom_left = factory.addPoint(0, 0, 0)
         bottom_right = factory.addPoint(crucible.params.r_in, 0, 0)
         if melt_surface_line:
             top_right = factory.addPoint(crucible.params.r_in, melt.params.h, 0)
         else:
             top_right = meniscus_points[0]
-        melt_crystal_if = factory.addLine(meniscus_points[-1], top_left)
+        if phase_if is None:
+            melt_crystal_if = factory.addLine(meniscus_points[-1], top_left)
+        else:
+            melt_crystal_if = phase_if.geo_id
         melt_sym_ax = factory.addLine(top_left, bottom_left)
         melt_crc_bt = factory.addLine(bottom_left, bottom_right)
         melt_crc_side = factory.addLine(bottom_right, top_right)
@@ -102,7 +110,8 @@ def melt(model, dim, crucible, h, char_l=0, T_init=273.15, material='', name='me
     melt.set_interface(crucible)
     return melt
 
-def crystal(model, dim, r, l, char_l=0, T_init=273.15, X0=[0, 0], material='', melt=None, name='crystal'):
+def crystal(model, dim, r, l, char_l=0, T_init=273.15, X0=[0, 0], material='', melt=None,
+            phase_if=None, name='crystal'):
     crys = Shape(model, dim, name)
     crys.params.r = r
     crys.params.l = l
@@ -117,10 +126,12 @@ def crystal(model, dim, r, l, char_l=0, T_init=273.15, X0=[0, 0], material='', m
         crys.params.X0 = X0
         crys.geo_ids = [cylinder(X0[0], X0[1], 0, r, l, dim)]
     else:  # in contact with melt
-        crys.params.X0 = [0, melt.params.X0[1] + melt.params.h_meniscus]
-        crys.geo_ids = [cylinder(0, crys.params.X0[1], 0, r, l, dim)]
-        crys.set_interface(melt)
-
+        if phase_if is None:  # use cylinder
+            crys.params.X0 = [0, melt.params.X0[1] + melt.params.h_meniscus]
+            crys.geo_ids = [cylinder(0, crys.params.X0[1], 0, r, l, dim)]
+            crys.set_interface(melt)
+        else:  # TODO draw manually
+            pass
     return crys
 
 def inductor(model, dim, d, d_in, X0, g=0, n=1, char_l=0, T_init=273.15, material='', name='inductor'):

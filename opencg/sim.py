@@ -1,16 +1,21 @@
+from copy import deepcopy
+from dataclasses import asdict
+from datetime import datetime
+import numpy as np
 import os
 import yaml
-import numpy as np
-import pyelmer.elmer as elmer
 
-from dataclasses import asdict
 from opencg.post import HeatfluxSurf
 
-SOLVER_FILE = os.path.dirname(os.path.realpath(__file__)) + '/data/solvers.yml'  # TODO path independent
+import pyelmer.elmer as elmer
+from pyelmer.execute import run_elmer_solver, run_elmer_grid
+from pyelmer.post import scan_logfile
+
+SOLVER_FILE = os.path.dirname(os.path.realpath(__file__)) + '/data/solvers.yml'
 MATERIAL_FILE = os.path.dirname(os.path.realpath(__file__)) + '/data/materials.yml'
 
 
-class ElmerSimulationCz:
+class ElmerSetupCz:
     def __init__(self, heat_control, heat_convection, heating_induction, phase_change, transient,
                  heating, sim_dir, v_pull=0, smart_heater={}, probes={}, transient_setup={}):
         self.heat_control = heat_control
@@ -67,7 +72,7 @@ class ElmerSimulationCz:
             solver_statmag.data.update({'Angular Frequency': omega})
         solver_heat = elmer.load_solver('HeatSolver', self.sim, SOLVER_FILE)
         if self.transient and self.heat_control:
-            solver_heat.data.update({'Smart Heater Time Scale': self.transient_setup['smart-heater-t']})
+            solver_heat.data.update({'Smart Heater Time Scale': self.smart_heater_t})
         if self.phase_change:
             if self.transient:
                 solver_phase_change = elmer.load_solver('TransientPhaseChange', self.sim, SOLVER_FILE)
@@ -262,4 +267,102 @@ class ElmerSimulationCz:
         # TODO that's a way too complicated!
         hfs = HeatfluxSurf(boundary.surface_ids[0], body.body_ids, body.material.data['Heat Conductivity'])
         self._heat_flux_dict.update({f'{body.name}_{boundary.name}': asdict(hfs)})
-        
+
+
+class Simulation:
+    def __init__(self, geo, geo_config, sim, sim_config, config_update, sim_name, sim_type,
+                 base_dir):
+        self.geo = geo
+        if 'geometry' in config_update:
+            geo_config = self._update_config(geo_config, config_update['geometry'])
+        self.geo_config = geo_config
+        self.sim = sim
+        if 'simulation' in config_update:
+            sim_config = self._update_config(sim_config, config_update['simulation'])
+        self.sim_config = sim_config
+        self.sim_name = sim_name
+        self.sim_type = sim_type
+        self.sim_dir = self._create_directories(base_dir)
+        self.elmer_dir = f'{self.sim_dir}/02_simulation'
+        self.results_file = f'{self.elmer_dir}/case.result'
+
+    def _create_directories(self, base_dir):
+        sim_dir = f'{base_dir}/{datetime.now():%Y-%m-%d_%H-%M}_{self.sim_type}_{self.sim_name}'
+        if os.path.exists(sim_dir):
+            i = 1
+            sim_dir += '_1'
+            while os.path.exists(sim_dir):
+                i += 1
+                sim_dir = '_'.join(sim_dir.split('_')[:-1]) + f'_{i}'
+        os.makedirs(sim_dir)
+        os.mkdir(f'{sim_dir}/01_input')
+        os.mkdir(f'{sim_dir}/02_simulation')
+        os.mkdir(f'{sim_dir}/03_results')
+        os.mkdir(f'{sim_dir}/04_plots')
+        return sim_dir
+
+    def _create_setup(self, visualize):
+        # TODO copy / write setup to input directory
+        model = self.geo(self.geo_config, self.elmer_dir, self.sim_name, visualize)
+        self.sim(model, self.sim_config, self.elmer_dir)
+    
+    def _run_elmer(self):
+        print('Starting simulation ', self.elmer_dir, ' ...')
+        run_elmer_grid(self.elmer_dir, self.sim_name + '.msh')
+        run_elmer_solver(self.elmer_dir)
+        # post_processing(sim_path)
+        err, warn, stats = scan_logfile(self.elmer_dir)
+        print(err, warn, stats)
+        print('Finished simulation ', self.elmer_dir, ' .')
+
+    @staticmethod
+    def _update_config(base_config, config_update):
+        if config_update is not None:
+            for param, update in config_update.items():
+                if type(update) is dict:
+                    base_config[param] = Simulation._update_config(base_config[param], config_update[param])
+                else:
+                    base_config[param] = update
+        return base_config
+    
+    @property
+    def last_interation(self):
+        return 0 
+
+
+class SteadyStateSim(Simulation):
+    def __init__(self, geo, geo_config, sim, sim_config, config_update={}, sim_name='opencgs-simulation',
+                 base_dir='./simdata', visualize=False, **kwargs):
+        super().__init__(geo, geo_config, sim, sim_config, config_update, sim_name, 'ss', base_dir)
+        sim_config['general']['transient'] = False
+        self._create_setup(visualize)
+
+    def execute(self):
+        self._run_elmer()
+
+    def post():
+        pass
+
+class TransientSim(Simulation):
+    def __init__(self, geo, geo_config, sim, sim_config, config_update={}, sim_name='opencgs-simulation',
+                 base_dir='./simdata', l_start = 5e-3, l_end = 0.1, **kwargs):
+        super().__init__(geo, geo_config, sim, sim_config, config_update, sim_name, 'st', base_dir)
+        sim_config['general']['transient'] = True
+        self.l_start = l_start
+        self.l_end = l_end
+
+    def execute(self):
+        print('Starting with steady state simulation')
+        geo_config = deepcopy(self.geo_config)
+        geo_config['crystal']['l'] = self.l_start
+        sim = SteadyStateSim(self.geo, geo_config, self.sim, deepcopy(self.sim_config),
+                             sim_name='initialization', base_dir=self.elmer_dir)
+        sim.execute()
+        current_l = self.l_start
+        old = sim
+        while current_l < self.l_start:
+            sim = TransientSubSim() # params: length, if-shape, time, start-index
+
+class TransientSubSim(Simulation):
+    pass
+

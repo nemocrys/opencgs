@@ -23,7 +23,7 @@ setuptools.setup(
         'Operating System :: OS Independent',
     ],
     install_requires=[
-      'gmsh',
+      #'gmsh',
       'pyyaml',
       'pyelmer',
     ],
