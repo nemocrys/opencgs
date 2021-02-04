@@ -3,6 +3,8 @@ from dataclasses import asdict
 from datetime import datetime
 import numpy as np
 import os
+import pandas as pd
+import shutil
 import yaml
 
 from opencg.post import HeatfluxSurf
@@ -91,9 +93,11 @@ class ElmerSetupCz:
                 point_str += f'{self.probes[key][0]} {self.probes[key][1]}'
                 n += 1
             solver_probe_scalars.data.update({f'Save Coordinates({n},2)': point_str})
+        if self.transient:
+            elmer.load_solver('Mesh2Mesh', self.sim, SOLVER_FILE)
         elmer.load_solver('SaveMaterials', self.sim, SOLVER_FILE)
         elmer.load_solver('ResultOutputSolver', self.sim, SOLVER_FILE)
-        elmer.load_solver('boundary-scalars', self.sim, SOLVER_FILE)
+        elmer.load_solver('SaveLine', self.sim, SOLVER_FILE)
 
         # equations
         if self.heating_induction:
@@ -125,14 +129,17 @@ class ElmerSetupCz:
     def _setup_transient_sim(self, dt, dt_out, t_max, smart_heater_t, restart=False,
                              restart_file='', restart_time=0):
         sim = elmer.load_simulation('axi-symmetric_transient')
+        # TODO implement restart in pyelmer
         sim.settings.update({'Timestep Sizes': dt})
         sim.settings.update({'Output Intervals': round(dt_out / dt)})
         sim.settings.update({'Timestep Intervals': round(t_max / dt)})
         if restart:
-            sim.settings.update({'Restart File': restart_file})
+            # sim.settings.update({'Restart File': restart_file})
+            # sim.settings.update({'Restart Variable 1': 'Temperature'})
+            # sim.settings.update({'Restart Variable 2': 'PhaseSurface'})
             sim.settings.update({'Restart Time': restart_time})
-            sim.settings.update({'Restart Variable 1': 'Temperature'})
-            sim.settings.update({'Restart Variable 2': 'PhaseSurface'})
+            sim.settings.update({'Restart Error Continue': 'Logical True',
+                                 'Use Mesh Projector': 'Logical False'})
         return sim
 
     @property
@@ -148,10 +155,7 @@ class ElmerSetupCz:
 
     @property
     def distortion(self):
-        if self.transient:
-            return [0, None]
-        else:
-            return [0, 0]
+        return [0, None]
 
     def add_crystal(self, shape, material='', force=None):
         self._crystal = self.add_body(shape, material, force)
@@ -181,7 +185,6 @@ class ElmerSetupCz:
         else:
             boundary.radiation_idealized = True
             boundary.T_ext = T_ext
-        boundary.save_scalars = True
         if htc != 0 and self.heat_convection:
             boundary.heat_transfer_coefficient = htc
             boundary.T_ext = T_ext
@@ -191,7 +194,6 @@ class ElmerSetupCz:
 
     def add_temperature_boundary(self, shape, T, movement=[0, 0]):
         boundary = elmer.Boundary(self.sim, shape.name, [shape.ph_id])
-        boundary.save_scalars = True
         boundary.fixed_temperature = T
         if self.mesh_update:
             boundary.mesh_update = movement
@@ -199,7 +201,6 @@ class ElmerSetupCz:
 
     def add_heatflux_boundary(self, shape, heatflux, movement=[0, 0]):
         boundary = elmer.Boundary(self.sim, shape.name, [shape.ph_id])
-        boundary.save_scalars = True
         boundary.fixed_heatflux = heatflux
         if self.mesh_update:
             boundary.mesh_update = movement
@@ -234,7 +235,7 @@ class ElmerSetupCz:
                                            'PhaseSurface': 'Real 0.0'}
         # Boundary condition
         bc_phase_if = elmer.Boundary(self.sim, 'melt_crystal_if', [shape.ph_id])
-        bc_phase_if.save_scalars = True
+        bc_phase_if.save_line = True
         bc_phase_if.normal_target_body = self.sim.bodies[crystal.name]
         if self.heat_control and not self.smart_heater['control-point']:
             bc_phase_if.smart_heater = True
@@ -250,7 +251,6 @@ class ElmerSetupCz:
 
     def add_interface(self, shape, movement=[0, 0]):
         boundary = elmer.Boundary(self.sim, shape.name, [shape.ph_id])
-        boundary.save_scalars = True
         if self.mesh_update:
             boundary.mesh_update = movement
 
@@ -271,7 +271,7 @@ class ElmerSetupCz:
 
 class Simulation:
     def __init__(self, geo, geo_config, sim, sim_config, config_update, sim_name, sim_type,
-                 base_dir):
+                 base_dir, with_date=True):
         self.geo = geo
         if 'geometry' in config_update:
             geo_config = self._update_config(geo_config, config_update['geometry'])
@@ -282,12 +282,15 @@ class Simulation:
         self.sim_config = sim_config
         self.sim_name = sim_name
         self.sim_type = sim_type
-        self.sim_dir = self._create_directories(base_dir)
+        self.sim_dir = self._create_directories(base_dir, with_date)
         self.elmer_dir = f'{self.sim_dir}/02_simulation'
         self.results_file = f'{self.elmer_dir}/case.result'
 
-    def _create_directories(self, base_dir):
-        sim_dir = f'{base_dir}/{datetime.now():%Y-%m-%d_%H-%M}_{self.sim_type}_{self.sim_name}'
+    def _create_directories(self, base_dir, with_date):
+        if with_date:
+            sim_dir = f'{base_dir}/{datetime.now():%Y-%m-%d_%H-%M}_{self.sim_type}_{self.sim_name}'
+        else:
+            sim_dir = f'{base_dir}/{self.sim_type}_{self.sim_name}'
         if os.path.exists(sim_dir):
             i = 1
             sim_dir += '_1'
@@ -301,12 +304,12 @@ class Simulation:
         os.mkdir(f'{sim_dir}/04_plots')
         return sim_dir
 
-    def _create_setup(self, visualize):
+    def _create_setup(self, visualize=False):
         # TODO copy / write setup to input directory
         model = self.geo(self.geo_config, self.elmer_dir, self.sim_name, visualize)
         self.sim(model, self.sim_config, self.elmer_dir)
     
-    def _run_elmer(self):
+    def execute(self):
         print('Starting simulation ', self.elmer_dir, ' ...')
         run_elmer_grid(self.elmer_dir, self.sim_name + '.msh')
         run_elmer_solver(self.elmer_dir)
@@ -326,28 +329,44 @@ class Simulation:
         return base_config
     
     @property
-    def last_interation(self):
-        return 0 
+    def vtu_files(self):
+        return [f for f in os.listdir(self.elmer_dir) if f.split('.')[-1] == 'vtu']
 
+    @property
+    def last_interation(self):
+        return max([int(f[-8:-4]) for f in self.vtu_files])
+
+    @property
+    def phase_interface(self):
+        header = ['iteration', 'BC', 'NodeIdx', 'x', 'y', 'z', 'T']
+        df = pd.read_table(f'{self.elmer_dir}/results/phase-if.dat', names=header, sep= ' ',
+                           skipinitialspace=True)
+        return [[line['x'], line['y']] for _, line in df.iterrows()]
+    
+    @property
+    def mesh_files(self):
+        files = []
+        for f in os.listdir(self.elmer_dir):
+            e = f.split('.')[-1]
+            if e == 'boundary' or e == 'elements' or e == 'header' or e == 'nodes':
+                files.append(f)
+        return files
+            
 
 class SteadyStateSim(Simulation):
     def __init__(self, geo, geo_config, sim, sim_config, config_update={}, sim_name='opencgs-simulation',
-                 base_dir='./simdata', visualize=False, **kwargs):
-        super().__init__(geo, geo_config, sim, sim_config, config_update, sim_name, 'ss', base_dir)
-        sim_config['general']['transient'] = False
+                 base_dir='./simdata', visualize=False, with_date=True, **kwargs):
+        super().__init__(geo, geo_config, sim, sim_config, config_update, sim_name, 'ss', base_dir, with_date)
+        self.sim_config['general']['transient'] = False
         self._create_setup(visualize)
-
-    def execute(self):
-        self._run_elmer()
 
     def post():
         pass
 
 class TransientSim(Simulation):
     def __init__(self, geo, geo_config, sim, sim_config, config_update={}, sim_name='opencgs-simulation',
-                 base_dir='./simdata', l_start = 5e-3, l_end = 0.1, **kwargs):
+                 base_dir='./simdata', l_start = 0.01, l_end = 0.1, **kwargs):
         super().__init__(geo, geo_config, sim, sim_config, config_update, sim_name, 'st', base_dir)
-        sim_config['general']['transient'] = True
         self.l_start = l_start
         self.l_end = l_end
 
@@ -355,14 +374,36 @@ class TransientSim(Simulation):
         print('Starting with steady state simulation')
         geo_config = deepcopy(self.geo_config)
         geo_config['crystal']['l'] = self.l_start
-        sim = SteadyStateSim(self.geo, geo_config, self.sim, deepcopy(self.sim_config),
-                             sim_name='initialization', base_dir=self.elmer_dir)
+        sim_config = deepcopy(self.sim_config)
+        sim_config['smart-heater']['control-point'] = True
+        sim = SteadyStateSim(self.geo, geo_config, self.sim, sim_config,
+                             sim_name='initialization', base_dir=self.elmer_dir, with_date=False)
         sim.execute()
         current_l = self.l_start
         old = sim
-        while current_l < self.l_start:
-            sim = TransientSubSim() # params: length, if-shape, time, start-index
+        i = 0
+        # while current_l < self.l_start:
+        t_end = 10
+        sim = TransientSubSim(old, t_end, self.geo, deepcopy(geo_config), self.sim,
+                                deepcopy(self.sim_config), sim_name=f'iteration_{i}',
+                                base_dir=self.elmer_dir)
+        sim.execute()
+        old = sim
+        i += 1
+            # params: length, if-shape, time, start-index
 
 class TransientSubSim(Simulation):
-    pass
+    def __init__(self, old, t_end, geo, geo_config, sim, sim_config, sim_name, base_dir):
+        super().__init__(geo, geo_config, sim, sim_config, {}, sim_name, 'ts', base_dir, False)
+        self.sim_config['general']['transient'] = True
+        self.sim_config['transient']['t_max'] = t_end
+        self.sim_config['transient']['restart'] = True
+        self.sim_config['transient']['restart_file'] = 'restart.result'
+        self.sim_config['transient']['restart_time'] = old.last_interation
+        self.geo_config['phase_if'] = old.phase_interface
+        os.mkdir(f'{self.elmer_dir}/old_mesh')
+        shutil.copy2(old.results_file, f'{self.elmer_dir}/old_mesh/restart.result')
+        for f in old.mesh_files:
+            shutil.copy2(f'{old.elmer_dir}/{f}', f'{self.elmer_dir}/old_mesh/{f}')
+        self._create_setup()
 

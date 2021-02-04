@@ -90,6 +90,13 @@ ResultOutputSolver:
   # Scalar Field 7: '"Phase Surface"'
   # Scalar Field 8: '"Joule Heating E"'
   # Scalar Field 9: '"Magnetic Flux Density E"'
+SaveLine:
+  Exec Solver: 'after all'
+  Equation: '"SaveLine"'
+  Procedure: '"SaveData" "SaveLine"'
+  Filename: '"phase-if.dat"'
+  Output Directory: './results'
+  Variable 1: Temperature
 FluxSolver:
   Exec Solver: 'before saving'
   Equation: 'String "Flux Solver"'
@@ -150,3 +157,13 @@ fast-simulation:
   Steady State Convergence Tolerance: 1.e-6
   Nonlinear System Convergence Tolerance: 1.0e-4
   Linear System Convergence Tolerance: 1.e-9
+Mesh2Mesh:
+  Equation: ISolver
+  Exec Solver: 'Before all'
+  Procedure: '"Mesh2MeshSolver" "Mesh2MeshSolver"'
+  # Variable: Flow Solution[Pressure:1 Velocity:2]
+  # Exported Variable 1: Temperature
+  Mesh: '"old_mesh"'
+  Restart File: 'File "restart.result"'
+  Restart Error Continue: Logical True
+  Variable 1: Temperature

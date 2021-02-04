@@ -24,6 +24,7 @@ setuptools.setup(
     ],
     install_requires=[
       #'gmsh',
+      'pandas',
       'pyyaml',
       'pyelmer',
     ],
