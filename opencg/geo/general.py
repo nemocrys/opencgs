@@ -9,8 +9,6 @@ def line_from_points(model, points, name='line'):
         pts = [factory.addPoint(x[0], x[1], 0) for x in points]
     else:
         pts = [factory.addPoint(x[0], x[1], x[2]) for x in points]
-    line.params.x_start = pts[0]
-    line.params.x_end = pts[-1]
     line.geo_ids = [factory.addSpline(pts)]
     factory.synchronize()
     return line

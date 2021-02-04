@@ -78,10 +78,10 @@ def melt(model, dim, crucible, h, char_l=0, T_init=273.15, material='', name='me
         meniscus_points = [factory.addPoint(meniscus_x[i], meniscus_y[i], 0)
                            for i in range(len(meniscus_x))]
         if phase_if is not None:
-            meniscus_points[-1] = phase_if.params.x_end
+            meniscus_points[-1] = phase_if.right_boundary
         melt_meniscus = factory.addSpline(meniscus_points)
         if phase_if is not None:
-            top_left = phase_if.params.x_start
+            top_left = phase_if.left_boundary
         else:
             top_left = factory.addPoint(0, meniscus_y.max(), 0)
         bottom_left = factory.addPoint(0, 0, 0)
@@ -99,15 +99,18 @@ def melt(model, dim, crucible, h, char_l=0, T_init=273.15, material='', name='me
         melt_crc_side = factory.addLine(bottom_right, top_right)
         if melt_surface_line:
             melt_surface = factory.addLine(top_right, meniscus_points[0])
-            loop = factory.addCurveLoop([melt_meniscus, melt_crystal_if, melt_sym_ax, melt_crc_bt, melt_crc_side, melt_surface])
+            loop = factory.addCurveLoop([melt_crystal_if, melt_sym_ax, melt_crc_bt, melt_crc_side,
+                                         melt_surface, melt_meniscus])
         else:
-            loop = factory.addCurveLoop([melt_meniscus, melt_crystal_if, melt_sym_ax, melt_crc_bt, melt_crc_side])
+            loop = factory.addCurveLoop([melt_crystal_if, melt_sym_ax, melt_crc_bt, melt_crc_side,
+                                         melt_meniscus])
         body = factory.addSurfaceFilling(loop)
         if dim == 3:
             body = rotate(body)
         melt.geo_ids = [body]
-
     melt.set_interface(crucible)
+    if phase_if is not None:
+        model.remove_shape(phase_if)
     return melt
 
 def crystal(model, dim, r, l, char_l=0, T_init=273.15, X0=[0, 0], material='', melt=None,
@@ -126,12 +129,19 @@ def crystal(model, dim, r, l, char_l=0, T_init=273.15, X0=[0, 0], material='', m
         crys.params.X0 = X0
         crys.geo_ids = [cylinder(X0[0], X0[1], 0, r, l, dim)]
     else:  # in contact with melt
+        crys.params.X0 = [0, melt.params.X0[1] + melt.params.h_meniscus]
         if phase_if is None:  # use cylinder
-            crys.params.X0 = [0, melt.params.X0[1] + melt.params.h_meniscus]
             crys.geo_ids = [cylinder(0, crys.params.X0[1], 0, r, l, dim)]
-            crys.set_interface(melt)
-        else:  # TODO draw manually
-            pass
+        else:  # draw manually
+            top_left  = factory.addPoint(0, crys.params.X0[1] + l, 0)
+            top_right = factory.addPoint(r, crys.params.X0[1] + l, 0)
+            left = factory.addLine(phase_if.left_boundary, top_left)
+            top = factory.addLine(top_left, top_right)
+            right = factory.addLine(top_right, phase_if.right_boundary)
+            loop = factory.addCurveLoop([left, top, right, phase_if.geo_id])
+            crys.geo_ids = [factory.addSurfaceFilling(loop)]
+            model.remove_shape(phase_if)
+        crys.set_interface(melt)
     return crys
 
 def inductor(model, dim, d, d_in, X0, g=0, n=1, char_l=0, T_init=273.15, material='', name='inductor'):
@@ -313,6 +323,7 @@ def surrounding(model, dim, X0, r, h, char_l=0, T_init=273.15, material='',
     sur.geo_ids = cut([(2, body)], dim_tags, False)
 
     for shape in shapes:
+        print(shape.name)
         sur.set_interface(shape)
 
     return sur
