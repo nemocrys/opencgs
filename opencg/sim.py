@@ -42,6 +42,7 @@ class ElmerSetupCz:
                 self.smart_heater_t = 1
         else:
             self.sim = elmer.load_simulation('axi-symmetric_steady')
+            self.sim.settings.update({'Output Intervals': 0})
 
         self.heating = heating
         self.probes = probes
@@ -94,10 +95,12 @@ class ElmerSetupCz:
                 n += 1
             solver_probe_scalars.data.update({f'Save Coordinates({n},2)': point_str})
         if self.transient:
-            elmer.load_solver('Mesh2Mesh', self.sim, SOLVER_FILE)
+            # elmer.load_solver('Mesh2Mesh', self.sim, SOLVER_FILE)
+            elmer.load_solver('gmsh-input', self.sim, SOLVER_FILE)
         elmer.load_solver('SaveMaterials', self.sim, SOLVER_FILE)
         elmer.load_solver('ResultOutputSolver', self.sim, SOLVER_FILE)
         elmer.load_solver('SaveLine', self.sim, SOLVER_FILE)
+        elmer.load_solver('gmsh-output', self.sim, SOLVER_FILE)
 
         # equations
         if self.heating_induction:
@@ -428,7 +431,7 @@ class TransientSim(Simulation):
         geo_config = deepcopy(self.geo_config)
         geo_config['crystal']['l'] = self.l_start
         sim_config = deepcopy(self.sim_config)
-        sim_config['smart-heater']['control-point'] = True
+        sim_config['general']['heat_control'] = True
         sim = SteadyStateSim(self.geo, geo_config, self.sim, sim_config,
                              sim_name='initialization', base_dir=self.elmer_dir, with_date=False)
         sim.execute()
@@ -436,7 +439,7 @@ class TransientSim(Simulation):
         old = sim
         i = 0
         # while current_l < self.l_start:
-        t_end = 10
+        t_end = 500
         sim = TransientSubSim(old, t_end, self.geo, deepcopy(geo_config), self.sim,
                                 deepcopy(self.sim_config), sim_name=f'iteration_{i}',
                                 base_dir=self.elmer_dir)
@@ -450,14 +453,17 @@ class TransientSubSim(Simulation):
         super().__init__(geo, geo_config, sim, sim_config, {}, sim_name, 'ts', base_dir, False)
         self.sim_config['general']['transient'] = True
         self.sim_config['transient']['t_max'] = t_end
-        self.sim_config['transient']['restart'] = True
-        self.sim_config['transient']['restart_file'] = 'restart.result'
-        self.sim_config['transient']['restart_time'] = old.last_interation
-        self.sim_config['heating_induction']['current'] = old.last_heater_current
+        # TODO remove this everywhere
+        # self.sim_config['transient']['restart'] = True
+        # self.sim_config['transient']['restart_file'] = 'restart.result'
+        # self.sim_config['transient']['restart_time'] = old.last_interation
+        # self.sim_config['heating_induction']['current'] = old.last_heater_current
         self.geo_config['phase_if'] = old.phase_interface
-        os.mkdir(f'{self.elmer_dir}/old_mesh')
-        shutil.copy2(old.results_file, f'{self.elmer_dir}/old_mesh/restart.result')
-        for f in old.mesh_files:
-            shutil.copy2(f'{old.elmer_dir}/{f}', f'{self.elmer_dir}/old_mesh/{f}')
+        # TODO remove corresponding properties
+        # os.mkdir(f'{self.elmer_dir}/old_mesh')
+        # shutil.copy2(old.results_file, f'{self.elmer_dir}/old_mesh/restart.result')
+        # for f in old.mesh_files:
+        #     shutil.copy2(f'{old.elmer_dir}/{f}', f'{self.elmer_dir}/old_mesh/{f}')
+        shutil.copy2(f'{old.elmer_dir}/result.msh', f'{self.elmer_dir}/input.msh')
         self._create_setup()
 
