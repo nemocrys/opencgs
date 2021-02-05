@@ -308,7 +308,52 @@ class Simulation:
         # TODO copy / write setup to input directory
         model = self.geo(self.geo_config, self.elmer_dir, self.sim_name, visualize)
         self.sim(model, self.sim_config, self.elmer_dir)
-    
+
+    @staticmethod
+    def _read_names_file(names_file, skip_rows=7):  # TODO move to pyelmer
+        with open(names_file) as f:
+            data = f.readlines()
+        data = data[7:]  # remove header
+        for i in range(len(data)):
+            data[i] = data[i][6:-1]  # remove index and \n
+        return data
+
+    def _postprocessing_probes(self):  # TODO copied from sim-elmerthermo. Dublecheck!
+        with open(self.elmer_dir + '/probes.yml') as f:
+            probes = list(yaml.safe_load(f).keys())
+        names_data = self._read_names_file(self.elmer_dir + '/results/probes.dat.names')
+        values = []
+        res = []
+        for column in names_data:
+            if 'value: ' in column:
+                values.append(column[7:].split(' in element ')[0])  # remove 'value: ' and 'in element XX'
+            if 'res: ' in column:
+                res.append('res ' + column[5:])
+        values = values[:int(len(values)/len(probes))]  # remove duplicates
+        header = []
+        for probe in probes:
+            for value in values:
+                header.append(probe + ' ' + value)
+        header_shortened = []
+        for column in header:
+            if 'temperature' in column and not 'loads' in column:
+                header_shortened.append(column)
+        for column in header:
+            if 'magnetic flux density' in column and 'MF' in column:
+                header_shortened.append(column)
+        header += res
+        header_shortened += res
+        df = pd.read_table(self.elmer_dir + '/results/probes.dat', names=header, sep=' ', skipinitialspace=True)
+        df = df[header_shortened]
+
+        data = {}
+        for column in df.iteritems():
+            data.update({column[0]: float(column[1].iloc[-1])})
+        with open(self.sim_dir + '/03_results/probes.yml', 'w') as f:
+            yaml.dump(data, f)
+        self.probe_data = data
+        df.to_csv(self.sim_dir + '/03_results/probes.csv', index=False, sep=';')
+
     def execute(self):
         print('Starting simulation ', self.elmer_dir, ' ...')
         run_elmer_grid(self.elmer_dir, self.sim_name + '.msh')
@@ -317,6 +362,9 @@ class Simulation:
         err, warn, stats = scan_logfile(self.elmer_dir)
         print(err, warn, stats)
         print('Finished simulation ', self.elmer_dir, ' .')
+        print('Evaluating probes...')
+        self._postprocessing_probes()
+        print('Probes evaluated')
 
     @staticmethod
     def _update_config(base_config, config_update):
@@ -352,6 +400,11 @@ class Simulation:
                 files.append(f)
         return files
             
+    @property
+    def last_heater_current(self):
+        I_base = self.sim_config['heating_induction']['current']
+        pwr_scaling = self.probe_data['res heater power scaling']
+        return I_base * pwr_scaling ** 0.5
 
 class SteadyStateSim(Simulation):
     def __init__(self, geo, geo_config, sim, sim_config, config_update={}, sim_name='opencgs-simulation',
@@ -400,6 +453,7 @@ class TransientSubSim(Simulation):
         self.sim_config['transient']['restart'] = True
         self.sim_config['transient']['restart_file'] = 'restart.result'
         self.sim_config['transient']['restart_time'] = old.last_interation
+        self.sim_config['heating_induction']['current'] = old.last_heater_current
         self.geo_config['phase_if'] = old.phase_interface
         os.mkdir(f'{self.elmer_dir}/old_mesh')
         shutil.copy2(old.results_file, f'{self.elmer_dir}/old_mesh/restart.result')
