@@ -39,7 +39,7 @@ class ElmerSetupCz:
             try:
                 self.smart_heater_t = transient_setup['smart_heater_t']
             except KeyError:
-                self.smart_heater_t = 1
+                self.smart_heater_t = transient_setup['dt']
         else:
             self.sim = elmer.load_simulation('axi-symmetric_steady')
             self.sim.settings.update({'Output Intervals': 0})
@@ -77,7 +77,8 @@ class ElmerSetupCz:
         if self.transient and self.heat_control:
             solver_heat.data.update({'Smart Heater Time Scale': self.smart_heater_t})
         if self.phase_change:
-            if self.transient:
+            if False:
+            # if self.transient: TODO
                 solver_phase_change = elmer.load_solver('TransientPhaseChange', self.sim, SOLVER_FILE)
             else:
                 solver_phase_change = elmer.load_solver('SteadyPhaseChange', self.sim, SOLVER_FILE)
@@ -129,8 +130,8 @@ class ElmerSetupCz:
                 joule_heat.smart_heater_T = self.smart_heater['T']
         self._joule_heat = joule_heat
 
-    def _setup_transient_sim(self, dt, dt_out, t_max, smart_heater_t, restart=False,
-                             restart_file='', restart_time=0):
+    def _setup_transient_sim(self, dt, dt_out, t_max, restart=False,
+                             restart_file='', restart_time=0, smart_heater_t=0):
         sim = elmer.load_simulation('axi-symmetric_transient')
         # TODO implement restart in pyelmer
         sim.settings.update({'Timestep Sizes': dt})
@@ -244,7 +245,8 @@ class ElmerSetupCz:
             bc_phase_if.smart_heater = True
             bc_phase_if.smart_heater_T = self.smart_heater['T']
         if self.phase_change:
-            if self.transient:
+            if False:
+            # if self.transient: # TODO
                 bc_phase_if.phase_change_transient = True
             else:
                 bc_phase_if.phase_change_steady = True
@@ -367,6 +369,7 @@ class Simulation:
         print('Finished simulation ', self.elmer_dir, ' .')
         print('Evaluating probes...')
         self._postprocessing_probes()
+        
         print('Probes evaluated')
 
     @staticmethod
@@ -421,10 +424,11 @@ class SteadyStateSim(Simulation):
 
 class TransientSim(Simulation):
     def __init__(self, geo, geo_config, sim, sim_config, config_update={}, sim_name='opencgs-simulation',
-                 base_dir='./simdata', l_start = 0.01, l_end = 0.1, **kwargs):
+                 base_dir='./simdata', l_start = 0.01, l_end = 0.15, **kwargs):
         super().__init__(geo, geo_config, sim, sim_config, config_update, sim_name, 'st', base_dir)
         self.l_start = l_start
         self.l_end = l_end
+        self.vtu_idx = 0
 
     def execute(self):
         print('Starting with steady state simulation')
@@ -435,18 +439,52 @@ class TransientSim(Simulation):
         sim = SteadyStateSim(self.geo, geo_config, self.sim, sim_config,
                              sim_name='initialization', base_dir=self.elmer_dir, with_date=False)
         sim.execute()
+        self.collect_vtu_files(sim, only_last=True)
         current_l = self.l_start
         old = sim
         i = 0
-        # while current_l < self.l_start:
-        t_end = 500
-        sim = TransientSubSim(old, t_end, self.geo, deepcopy(geo_config), self.sim,
-                                deepcopy(self.sim_config), sim_name=f'iteration_{i}',
-                                base_dir=self.elmer_dir)
-        sim.execute()
-        old = sim
-        i += 1
+        dt = sim_config['transient']['dt']
+        v_pull = sim_config['general']['v_pull']  / 6e4
+        while current_l < self.l_end:
+            l_max = min(current_l * 1.25, self.l_end)
+            t_end = 0
+            l_sim_end = current_l
+            while l_sim_end < l_max:
+                t_end += dt
+                l_sim_end += dt*v_pull
+            sim_config = deepcopy(self.sim_config)
+            sim_config['transient']['t_max'] = t_end
+            geo_config = deepcopy(self.geo_config)
+            geo_config['crystal']['l'] = current_l
+            sim = TransientSubSim(old, t_end, self.geo, geo_config, self.sim,
+                                    sim_config, sim_name=f'iteration_{i}',
+                                    base_dir=self.elmer_dir)
+            sim.execute()
+            self.collect_vtu_files(sim)
+            old = sim
+            i += 1
+            current_l = l_sim_end
             # params: length, if-shape, time, start-index
+
+    def collect_vtu_files(self, sim, only_last=False):
+        if only_last:
+            vtus = [sim.vtu_files[-1]]
+        else:
+            vtus = sim.vtu_files
+        # TODO rename directories sim_dir -> simulation, res_dir -> results, ...
+        res_dir = f'{self.sim_dir}/03_results'
+        for vtu in vtus:
+            if self.vtu_idx < 10:
+                prefix = '000'
+            elif self.vtu_idx < 100:
+                prefix = '00'
+            elif self.vtu_idx < 1000:
+                prefix = '0'
+            else:
+                prefix = ''
+            name = f'case_t{prefix}{self.vtu_idx}.vtu'
+            shutil.copy2(f'{sim.elmer_dir}/{vtu}', f'{res_dir}/{name}')
+            self.vtu_idx += 1
 
 class TransientSubSim(Simulation):
     def __init__(self, old, t_end, geo, geo_config, sim, sim_config, sim_name, base_dir):
