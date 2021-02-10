@@ -423,42 +423,65 @@ class SteadyStateSim(Simulation):
         pass
 
 class TransientSim(Simulation):
-    def __init__(self, geo, geo_config, sim, sim_config, config_update={}, sim_name='opencgs-simulation',
-                 base_dir='./simdata', l_start = 0.01, l_end = 0.15, **kwargs):
+    def __init__(self, geo, geo_config, sim, sim_config, config_update={},
+                 sim_name='opencgs-simulation', base_dir='./simdata', l_start = 0.01,
+                 l_end = 0.1, d_l = 3e-3, dt=0, dt_out=0, v_pull=0, visualize=False, **kwargs):
         super().__init__(geo, geo_config, sim, sim_config, config_update, sim_name, 'st', base_dir)
         self.l_start = l_start
         self.l_end = l_end
+        self.d_l = d_l
+        if v_pull == 0:
+            self.v_pull = sim_config['general']['v_pull']
+        else:
+            self.v_pull = v_pull
+        if dt == 0:
+            self.dt = d_l / (self.v_pull / 6e4) / 10  # 10 time steps per d_l
+        else:
+            self.dt = dt
+        print(f'Time step: {self.dt} s')
+        if dt_out == 0:
+            self.dt_out = self.dt
+        else:
+            self.dt_out = dt_out
+        print(f'Output time step: {self.dt} s')
+        # TODO missmatch between d_l , dt / dt_out
+        if 'transient' not in self.sim_config:
+            self.sim_config['transient'] = {}
+        self.sim_config['transient']['dt'] = self.dt
+        self.sim_config['transient']['dt_out'] = self.dt_out
+        self.visualize = visualize
         self.vtu_idx = 0
 
     def execute(self):
-        print('Starting with steady state simulation')
+        print('Initial steady state simulation...')
         geo_config = deepcopy(self.geo_config)
         geo_config['crystal']['l'] = self.l_start
         sim_config = deepcopy(self.sim_config)
         sim_config['general']['heat_control'] = True
         sim = SteadyStateSim(self.geo, geo_config, self.sim, sim_config,
-                             sim_name='initialization', base_dir=self.elmer_dir, with_date=False)
+                             sim_name='initialization', base_dir=self.elmer_dir,
+                             with_date=False, visualize=self.visualize)
         sim.execute()
         self.collect_vtu_files(sim, only_last=True)
+        print('Iterative transient simulation...')
         current_l = self.l_start
         old = sim
         i = 0
-        dt = sim_config['transient']['dt']
-        v_pull = sim_config['general']['v_pull']  / 6e4
         while current_l < self.l_end:
-            l_max = min(current_l * 1.25, self.l_end)
+            print('Starting new simulation. Current crystal length:', current_l)
+            # compute end time
             t_end = 0
             l_sim_end = current_l
-            while l_sim_end < l_max:
-                t_end += dt
-                l_sim_end += dt*v_pull
+            while l_sim_end < min(current_l + self.d_l, self.l_end):
+                t_end += self.dt
+                l_sim_end += self.dt * self.v_pull / 6e4
             sim_config = deepcopy(self.sim_config)
             sim_config['transient']['t_max'] = t_end
             geo_config = deepcopy(self.geo_config)
             geo_config['crystal']['l'] = current_l
             sim = TransientSubSim(old, t_end, self.geo, geo_config, self.sim,
                                     sim_config, sim_name=f'iteration_{i}',
-                                    base_dir=self.elmer_dir)
+                                    base_dir=self.elmer_dir, visualize=self.visualize)
             sim.execute()
             self.collect_vtu_files(sim)
             old = sim
@@ -487,7 +510,8 @@ class TransientSim(Simulation):
             self.vtu_idx += 1
 
 class TransientSubSim(Simulation):
-    def __init__(self, old, t_end, geo, geo_config, sim, sim_config, sim_name, base_dir):
+    def __init__(self, old, t_end, geo, geo_config, sim, sim_config, sim_name, base_dir,
+                 visualize=False):
         super().__init__(geo, geo_config, sim, sim_config, {}, sim_name, 'ts', base_dir, False)
         self.sim_config['general']['transient'] = True
         self.sim_config['transient']['t_max'] = t_end
@@ -503,5 +527,5 @@ class TransientSubSim(Simulation):
         # for f in old.mesh_files:
         #     shutil.copy2(f'{old.elmer_dir}/{f}', f'{self.elmer_dir}/old_mesh/{f}')
         shutil.copy2(f'{old.elmer_dir}/result.msh', f'{self.elmer_dir}/input.msh')
-        self._create_setup()
+        self._create_setup(visualize)
 
