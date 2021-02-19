@@ -3,7 +3,7 @@ import yaml
 from pyelmer.gmsh_objects import Shape
 from pyelmer.gmsh_utils import *
 
-from opencg import sim
+from opencg import setup
 
 # TODO stl import
 
@@ -50,7 +50,7 @@ def melt(model, dim, crucible, h, char_l=0, T_init=273.15, material='', name='me
         melt.geo_ids = [cylinder(0, 0, 0, crucible.params.r_in, h, dim)]
     else:  # with meniscus, following Landau87
         if rho == 0:  # read material data from material file
-            with open(sim.MATERIAL_FILE) as f:
+            with open(setup.MATERIAL_FILE) as f:
                 data = yaml.safe_load(f)[material]
             rho = data['Density']
             gamma = data['Surface Tension']
