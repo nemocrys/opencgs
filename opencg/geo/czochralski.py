@@ -7,8 +7,19 @@ from opencg import setup
 
 # TODO stl import
 
-def crucible(model, dim, h, r_in, r_out, t_bt, char_l=0, T_init=273.15, material='',
-             name='crucible'):
+
+def crucible(
+    model,
+    dim,
+    h,
+    r_in,
+    r_out,
+    t_bt,
+    char_l=0,
+    T_init=273.15,
+    material="",
+    name="crucible",
+):
     crc = Shape(model, dim, name)
 
     crc.params.h = h
@@ -17,7 +28,7 @@ def crucible(model, dim, h, r_in, r_out, t_bt, char_l=0, T_init=273.15, material
     crc.params.t_bt = t_bt
     crc.params.T_init = T_init
     crc.params.X0 = [0, -crc.params.t_bt]
-    crc.params.material=material
+    crc.params.material = material
 
     if char_l == 0:
         crc.mesh_size = min([r_out - r_in, t_bt]) / 5
@@ -25,21 +36,37 @@ def crucible(model, dim, h, r_in, r_out, t_bt, char_l=0, T_init=273.15, material
         crc.mesh_size = char_l
 
     body = cylinder(0, crc.params.X0[1], 0, r_out, h, dim)
-    hole = cylinder(0, 0, 0, r_in, h -t_bt, dim)
+    hole = cylinder(0, 0, 0, r_in, h - t_bt, dim)
     factory.cut([(dim, body)], [(dim, hole)])
     factory.synchronize()
 
     crc.geo_ids = [body]
 
     return crc
-    
-def melt(model, dim, crucible, h, char_l=0, T_init=273.15, material='', name='melt',
-         crystal_radius=0, phase_if= None, rho=0, gamma=0, beta=0, g=9.81, res=100):
+
+
+def melt(
+    model,
+    dim,
+    crucible,
+    h,
+    char_l=0,
+    T_init=273.15,
+    material="",
+    name="melt",
+    crystal_radius=0,
+    phase_if=None,
+    rho=0,
+    gamma=0,
+    beta=0,
+    g=9.81,
+    res=100,
+):
     melt = Shape(model, dim, name)
     melt.params.h = h
     melt.params.T_init = T_init
     melt.params.X0 = [0, 0]
-    melt.params.material= material
+    melt.params.material = material
     if char_l == 0:
         melt.mesh_size = melt.params.h / 10
     else:
@@ -52,31 +79,40 @@ def melt(model, dim, crucible, h, char_l=0, T_init=273.15, material='', name='me
         if rho == 0:  # read material data from material file
             with open(setup.MATERIAL_FILE) as f:
                 data = yaml.safe_load(f)[material]
-            rho = data['Density']
-            gamma = data['Surface Tension']
-            beta = data['Beta'] / 360 * 2 * np.pi  # theta in Landau87
-        a = (2 * gamma / (rho * g))**0.5  # capillary constant
-        h = a * (1 - 1 * np.sin(beta))**0.5
+            rho = data["Density"]
+            gamma = data["Surface Tension"]
+            beta = data["Beta"] / 360 * 2 * np.pi  # theta in Landau87
+        a = (2 * gamma / (rho * g)) ** 0.5  # capillary constant
+        h = a * (1 - 1 * np.sin(beta)) ** 0.5
         z = np.linspace(0, h, res)[1:]
-        x0 = - a / 2**0.5 * np.arccosh(2**0.5 * a / h) + a * (2 - h**2 / a**2)**0.5 # x(z) in Landau has wrong sign, multiplied by -1 here
-        x = a / 2**0.5 * np.arccosh(2**0.5 * a / z) - a * (2 - z**2 / a**2)**0.5 + x0
+        x0 = (
+            -a / 2 ** 0.5 * np.arccosh(2 ** 0.5 * a / h)
+            + a * (2 - h ** 2 / a ** 2) ** 0.5
+        )  # x(z) in Landau has wrong sign, multiplied by -1 here
+        x = (
+            a / 2 ** 0.5 * np.arccosh(2 ** 0.5 * a / z)
+            - a * (2 - z ** 2 / a ** 2) ** 0.5
+            + x0
+        )
         # convert Landau coordinates into global coordinates
         meniscus_x = x + crystal_radius
         meniscus_y = z + h
         if meniscus_x.max() >= crucible.params.r_in:  # meniscus longer than melt: cut
             melt_surface_line = False
             for i in range(len(meniscus_x)):
-                if meniscus_x[-(i+1)] > crucible.params.r_in:
+                if meniscus_x[-(i + 1)] > crucible.params.r_in:
                     break
-            meniscus_x = meniscus_x[-(i+1):]
-            meniscus_y = meniscus_y[-(i+1):]
+            meniscus_x = meniscus_x[-(i + 1) :]
+            meniscus_y = meniscus_y[-(i + 1) :]
             meniscus_x[0] = crucible.params.r_in
         else:  # meniscus shorter than melt
-            melt_surface_line = True 
+            melt_surface_line = True
         meniscus_y += -meniscus_y.min() + melt.params.h
         melt.params.h_meniscus = meniscus_y.max()
-        meniscus_points = [factory.addPoint(meniscus_x[i], meniscus_y[i], 0)
-                           for i in range(len(meniscus_x))]
+        meniscus_points = [
+            factory.addPoint(meniscus_x[i], meniscus_y[i], 0)
+            for i in range(len(meniscus_x))
+        ]
         if phase_if is not None:
             meniscus_points[-1] = phase_if.right_boundary
         melt_meniscus = factory.addSpline(meniscus_points)
@@ -99,11 +135,26 @@ def melt(model, dim, crucible, h, char_l=0, T_init=273.15, material='', name='me
         melt_crc_side = factory.addLine(bottom_right, top_right)
         if melt_surface_line:
             melt_surface = factory.addLine(top_right, meniscus_points[0])
-            loop = factory.addCurveLoop([melt_crystal_if, melt_sym_ax, melt_crc_bt, melt_crc_side,
-                                         melt_surface, melt_meniscus])
+            loop = factory.addCurveLoop(
+                [
+                    melt_crystal_if,
+                    melt_sym_ax,
+                    melt_crc_bt,
+                    melt_crc_side,
+                    melt_surface,
+                    melt_meniscus,
+                ]
+            )
         else:
-            loop = factory.addCurveLoop([melt_crystal_if, melt_sym_ax, melt_crc_bt, melt_crc_side,
-                                         melt_meniscus])
+            loop = factory.addCurveLoop(
+                [
+                    melt_crystal_if,
+                    melt_sym_ax,
+                    melt_crc_bt,
+                    melt_crc_side,
+                    melt_meniscus,
+                ]
+            )
         body = factory.addSurfaceFilling(loop)
         if dim == 3:
             body = rotate(body)
@@ -113,8 +164,20 @@ def melt(model, dim, crucible, h, char_l=0, T_init=273.15, material='', name='me
         model.remove_shape(phase_if)
     return melt
 
-def crystal(model, dim, r, l, char_l=0, T_init=273.15, X0=[0, 0], material='', melt=None,
-            phase_if=None, name='crystal'):
+
+def crystal(
+    model,
+    dim,
+    r,
+    l,
+    char_l=0,
+    T_init=273.15,
+    X0=[0, 0],
+    material="",
+    melt=None,
+    phase_if=None,
+    name="crystal",
+):
     crys = Shape(model, dim, name)
     crys.params.r = r
     crys.params.l = l
@@ -133,7 +196,7 @@ def crystal(model, dim, r, l, char_l=0, T_init=273.15, X0=[0, 0], material='', m
         if phase_if is None:  # use cylinder
             crys.geo_ids = [cylinder(0, crys.params.X0[1], 0, r, l, dim)]
         else:  # draw manually
-            top_left  = factory.addPoint(0, crys.params.X0[1] + l, 0)
+            top_left = factory.addPoint(0, crys.params.X0[1] + l, 0)
             top_right = factory.addPoint(r, crys.params.X0[1] + l, 0)
             left = factory.addLine(phase_if.left_boundary, top_left)
             top = factory.addLine(top_left, top_right)
@@ -144,7 +207,20 @@ def crystal(model, dim, r, l, char_l=0, T_init=273.15, X0=[0, 0], material='', m
         crys.set_interface(melt)
     return crys
 
-def inductor(model, dim, d, d_in, X0, g=0, n=1, char_l=0, T_init=273.15, material='', name='inductor'):
+
+def inductor(
+    model,
+    dim,
+    d,
+    d_in,
+    X0,
+    g=0,
+    n=1,
+    char_l=0,
+    T_init=273.15,
+    material="",
+    name="inductor",
+):
     # X0: center of bottom winding
     ind = Shape(model, dim, name)
     ind.params.d = d
@@ -154,7 +230,7 @@ def inductor(model, dim, d, d_in, X0, g=0, n=1, char_l=0, T_init=273.15, materia
     ind.params.X0 = X0
     ind.params.T_init = T_init
     ind.params.material = material
-    ind.params.area = np.pi * (d**2 - d_in**2) / 4
+    ind.params.area = np.pi * (d ** 2 - d_in ** 2) / 4
     if char_l == 0:
         ind.mesh_size = d / 10
     else:
@@ -176,8 +252,19 @@ def inductor(model, dim, d, d_in, X0, g=0, n=1, char_l=0, T_init=273.15, materia
 
     return ind
 
-def crucible_support(model, dim, r_in, r_out, h, top_shape, char_l=0, T_init=273.15, material='',
-                     name='crucible_support'):
+
+def crucible_support(
+    model,
+    dim,
+    r_in,
+    r_out,
+    h,
+    top_shape,
+    char_l=0,
+    T_init=273.15,
+    material="",
+    name="crucible_support",
+):
     sup = Shape(model, dim, name)
     sup.params.r_in = r_in
     sup.params.r_out = r_out
@@ -199,8 +286,21 @@ def crucible_support(model, dim, r_in, r_out, h, top_shape, char_l=0, T_init=273
     sup.set_interface(top_shape)
     return sup
 
-def crucible_adapter(model, dim, r_in_top, r_in_bt, r_out, h_top, h_bt, top_shape, char_l=0,
-                     T_init=273.15, material='', name='crucible_adapter'):
+
+def crucible_adapter(
+    model,
+    dim,
+    r_in_top,
+    r_in_bt,
+    r_out,
+    h_top,
+    h_bt,
+    top_shape,
+    char_l=0,
+    T_init=273.15,
+    material="",
+    name="crucible_adapter",
+):
     adp = Shape(model, dim, name)
     adp.params.r_in_top = r_in_top
     adp.params.r_in_bt = r_in_bt
@@ -230,7 +330,8 @@ def crucible_adapter(model, dim, r_in_top, r_in_bt, r_out, h_top, h_bt, top_shap
     adp.set_interface(top_shape)
     return adp
 
-def seed(model, dim, crystal, r, l, char_l=0, T_init=273.15, material='', name='seed'):
+
+def seed(model, dim, crystal, r, l, char_l=0, T_init=273.15, material="", name="seed"):
     seed = Shape(model, dim, name)
     seed.params.l = l
     seed.params.r = r
@@ -247,15 +348,26 @@ def seed(model, dim, crystal, r, l, char_l=0, T_init=273.15, material='', name='
 
     return seed
 
-def axis_top(model, dim, seed, r, l=0, vessel=None, char_l=0, T_init=273.15, material='',
-             name='axis_top'):
+
+def axis_top(
+    model,
+    dim,
+    seed,
+    r,
+    l=0,
+    vessel=None,
+    char_l=0,
+    T_init=273.15,
+    material="",
+    name="axis_top",
+):
     ax = Shape(model, dim, name)
     ax.params.r = r
     ax.params.X0 = [0, seed.params.X0[1] + seed.params.l]
     ax.params.material = material
     if l == 0:
         if vessel is None:
-            raise ValueError('If l=0 a vessel shape must be provided.')
+            raise ValueError("If l=0 a vessel shape must be provided.")
         l = vessel.params.X0[1] + vessel.params.t + vessel.params.h_in - ax.params.X0[1]
     ax.params.l = l
     if char_l == 0:
@@ -267,11 +379,22 @@ def axis_top(model, dim, seed, r, l=0, vessel=None, char_l=0, T_init=273.15, mat
     ax.set_interface(seed)
     if vessel is not None:
         ax.set_interface(vessel)
-    
+
     return ax
 
-def vessel(model, dim, r_in, h_in, t, adjacent_shapes, char_l=0, T_init=273.15,
-           material='', name='vessel'):
+
+def vessel(
+    model,
+    dim,
+    r_in,
+    h_in,
+    t,
+    adjacent_shapes,
+    char_l=0,
+    T_init=273.15,
+    material="",
+    name="vessel",
+):
     vsl = Shape(model, dim, name)
     vsl.params.r_in = r_in
     vsl.params.h_in = h_in
@@ -292,23 +415,34 @@ def vessel(model, dim, r_in, h_in, t, adjacent_shapes, char_l=0, T_init=273.15,
 
     for shape in adjacent_shapes:
         vsl.set_interface(shape)
-    
+
     return vsl
 
-def filling(model, dim, vessel, char_l=0, T_init=273.15, material='', name='filling'):
-    return surrounding(model, dim, [0, vessel.params.X0[1] + vessel.params.t],
-                       vessel.params.r_in, vessel.params.h_in, char_l, T_init,
-                       material, name)
 
-def surrounding(model, dim, X0, r, h, char_l=0, T_init=273.15, material='',
-                    name='surrounding'):
+def filling(model, dim, vessel, char_l=0, T_init=273.15, material="", name="filling"):
+    return surrounding(
+        model,
+        dim,
+        [0, vessel.params.X0[1] + vessel.params.t],
+        vessel.params.r_in,
+        vessel.params.h_in,
+        char_l,
+        T_init,
+        material,
+        name,
+    )
+
+
+def surrounding(
+    model, dim, X0, r, h, char_l=0, T_init=273.15, material="", name="surrounding"
+):
     # get all other shapes first
     shapes = model.get_shapes(2)
     # create this shape afterwards
     sur = Shape(model, dim, name)
     sur.params.X0 = X0
     sur.params.r = r
-    sur.params.h = h    
+    sur.params.h = h
     sur.params.T_init = T_init
     sur.params.material = material
     if char_l == 0:
@@ -329,9 +463,9 @@ def surrounding(model, dim, X0, r, h, char_l=0, T_init=273.15, material='',
     return sur
 
 
-
 def resistance_heater():
     pass
+
 
 def resistance_heating_insulation():
     pass

@@ -2,7 +2,7 @@ from pyelmer.gmsh_objects import Shape
 from pyelmer.gmsh_utils import *
 
 
-def line_from_points(model, points, name='line'):
+def line_from_points(model, points, name="line"):
     line = Shape(model, 1, name)
     line.params.points = points
     if len(points[0]) == 2:

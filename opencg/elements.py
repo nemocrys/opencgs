@@ -7,6 +7,7 @@ from dataclasses import dataclass
 @dataclass
 class Node:
     """Node, contains its coordinates and Temperature."""
+
     x: float
     y: float
     z: float = 0
@@ -19,8 +20,8 @@ class Node:
 
 
 class Triangle:
-    """Base class for triangle elements.
-    """
+    """Base class for triangle elements."""
+
     def __init__(self, nodes):
         self.n1 = nodes[0]
         self.n2 = nodes[1]
@@ -29,12 +30,15 @@ class Triangle:
     @property
     def A(self):
         """Surface of the triangle"""
-        return 0.5 * ((self.n2.x * self.n3.y - self.n3.x * self.n2.y)
-                      - (self.n1.x * self.n3.y - self.n3.x * self.n1.y)
-                      + (self.n1.x * self.n2.y - self.n2.x * self.n1.y))
+        return 0.5 * (
+            (self.n2.x * self.n3.y - self.n3.x * self.n2.y)
+            - (self.n1.x * self.n3.y - self.n3.x * self.n1.y)
+            + (self.n1.x * self.n2.y - self.n2.x * self.n1.y)
+        )
 
 
 class Triangle1st(Triangle):
+    # fmt: off
     """Triangle first order.
     Node numbering:
     n3          
@@ -45,6 +49,7 @@ class Triangle1st(Triangle):
     |        `\ 
     n1---------n2
     """
+    # fmt: on
     def B_e(self, x, y):
         """Derivative of shape functions.
 
@@ -57,8 +62,12 @@ class Triangle1st(Triangle):
         """
         del x, y
         # according to Ottosen1992 p.124 eqn 7.99
-        B_e = np.array([[self.n2.y - self.n3.y, self.n3.y - self.n1.y, self.n1.y - self.n2.y],
-                        [self.n3.x - self.n2.x, self.n1.x - self.n3.x, self.n2.x - self.n1.x]])
+        B_e = np.array(
+            [
+                [self.n2.y - self.n3.y, self.n3.y - self.n1.y, self.n1.y - self.n2.y],
+                [self.n3.x - self.n2.x, self.n1.x - self.n3.x, self.n2.x - self.n1.x],
+            ]
+        )
         B_e /= 2 * self.A
         return B_e
 
@@ -70,6 +79,7 @@ class Triangle1st(Triangle):
 
 
 class Triangle2nd(Triangle):
+    # fmt: off
     """Triangle second order.
     Node numbering:
     n3          
@@ -82,6 +92,7 @@ class Triangle2nd(Triangle):
 
     Formulas according to Zienkiewicz2005 p.116 ff.
     """
+    # fmt: on
     def __init__(self, nodes):
         self.n1 = nodes[0]
         self.n2 = nodes[1]
@@ -127,25 +138,25 @@ class Triangle2nd(Triangle):
         return self.n2.x - self.n1.x
 
     def L1(self, x, y):
-        return (self.a1 + self.b1 * x + self.c1 * y)  / (2 * self.A)
+        return (self.a1 + self.b1 * x + self.c1 * y) / (2 * self.A)
 
     def L2(self, x, y):
-        return (self.a2 + self.b2 * x + self.c2 * y)  / (2 * self.A)
+        return (self.a2 + self.b2 * x + self.c2 * y) / (2 * self.A)
 
     def L3(self, x, y):
-        return (self.a3 + self.b3 * x + self.c3 * y)  / (2 * self.A)
+        return (self.a3 + self.b3 * x + self.c3 * y) / (2 * self.A)
 
     def N1(self, x, y):
         L1 = self.L1(x, y)
-        return (2*L1 - 1) * L1
+        return (2 * L1 - 1) * L1
 
     def N2(self, x, y):
         L2 = self.L2(x, y)
-        return (2*L2 - 1) * L2
+        return (2 * L2 - 1) * L2
 
     def N3(self, x, y):
         L3 = self.L3(x, y)
-        return (2*L3 - 1) * L3
+        return (2 * L3 - 1) * L3
 
     def N4(self, x, y):
         L1 = self.L1(x, y)
@@ -269,8 +280,22 @@ class Triangle2nd(Triangle):
             numpy array: Derivative matrix at (x, y)
         """
         B_e = [
-            [self.N1_x(x, y), self.N2_x(x, y), self.N3_x(x, y), self.N4_x(x, y), self.N5_x(x, y), self.N6_x(x, y)],
-            [self.N1_y(x, y), self.N2_y(x, y), self.N3_y(x, y), self.N4_y(x, y), self.N5_y(x, y), self.N6_y(x, y)]
+            [
+                self.N1_x(x, y),
+                self.N2_x(x, y),
+                self.N3_x(x, y),
+                self.N4_x(x, y),
+                self.N5_x(x, y),
+                self.N6_x(x, y),
+            ],
+            [
+                self.N1_y(x, y),
+                self.N2_y(x, y),
+                self.N3_y(x, y),
+                self.N4_y(x, y),
+                self.N5_y(x, y),
+                self.N6_y(x, y),
+            ],
         ]
         return np.array(B_e)
 
@@ -295,12 +320,13 @@ class Line1st:
     """Line element of first order:
     n1----n2
     """
+
     def __init__(self, nodes):
         self.n1 = nodes[0]
         self.n2 = nodes[1]
         n = np.array([self.n2.y - self.n1.y, -(self.n2.x - self.n1.x)])
         self.normal = n / np.linalg.norm(n)
-    
+
     def invert_normal(self):
         self.normal *= -1
 
@@ -309,6 +335,7 @@ class Line2nd(Line1st):
     """Line element of second order:
     n1----n3----n2
     """
+
     def __init__(self, nodes):
         super().__init__(nodes[:-1])
         self.n3 = nodes[2]

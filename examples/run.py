@@ -1,7 +1,7 @@
 import opencg.control as ctrl
 
 
-config = './examples/cz_test/config.yml'
+config = "./examples/cz_test/config.yml"
 
 
 if __name__ == "__main__":

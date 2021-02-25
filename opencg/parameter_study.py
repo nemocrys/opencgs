@@ -19,7 +19,7 @@ def replace_params(base_dict, sim_dict):
     """
     for key in sim_dict:
         if not key in base_dict.keys():
-            raise ValueError('Wrong parameter name in simulation.yml: ' + key)
+            raise ValueError("Wrong parameter name in simulation.yml: " + key)
         if type(sim_dict[key]) is dict:
             base_dict[key] = replace_params(base_dict[key], sim_dict[key])
         else:
@@ -97,14 +97,20 @@ def create_permutations(param_lists_dict, base_dict, sim_dict):
             for variant in variation:
                 sim_new = replace_params(copy.deepcopy(sim), variant)
                 print(variant)
-                name = str(variant).replace('{','').replace('}','').replace(' ', '')\
-                       .replace("'", '').split(':')
-                name = name[-2] + '_' + name[-1]
+                name = (
+                    str(variant)
+                    .replace("{", "")
+                    .replace("}", "")
+                    .replace(" ", "")
+                    .replace("'", "")
+                    .split(":")
+                )
+                name = name[-2] + "_" + name[-1]
                 print(name)
-                sim_new['setup']['name'] += '_' + name
+                sim_new["setup"]["name"] += "_" + name
                 simulations_new.append(sim_new)
-        simulations = simulations_new       
-    
+        simulations = simulations_new
+
     return simulations
 
 
@@ -132,7 +138,7 @@ def create_permutation_lists(param_lists_dict):
                                 variation.append({key_0: {key_1: {key_2: element}}})
                             variations.append(variation)
                         else:
-                            raise ValueError('To high depth in data dict.')
+                            raise ValueError("To high depth in data dict.")
     return variations
 
 
@@ -146,25 +152,29 @@ def create_variations(param_lists_dict, base_dict, sim_dict):
         if type(val0) is list:
             for val in val0:
                 sim_new = replace_params(copy.deepcopy(base), {key0: val})
-                sim_new['setup']['name'] = key0 + '_' + str(val)
+                sim_new["setup"]["name"] = key0 + "_" + str(val)
                 simulations.append(sim_new)
         else:
             for key1, val1 in val0.items():
                 if type(val1) is list:
                     for val in val1:
-                        sim_new = replace_params(copy.deepcopy(base), {key0: {key1: val}})
-                        sim_new['setup']['name'] = key0 + '_' + key1 + '_' + str(val)
+                        sim_new = replace_params(
+                            copy.deepcopy(base), {key0: {key1: val}}
+                        )
+                        sim_new["setup"]["name"] = key0 + "_" + key1 + "_" + str(val)
                         simulations.append(sim_new)
                 else:
                     for key2, val2 in val1.items():
                         if type(val2) is list:
                             for val in val2:
-                                sim_new = replace_params(copy.deepcopy(base),
-                                                         {key0: {key1: {key2: val}}})
-                                sim_new['setup']['name'] = key0 + '_' + key1 + '_' + key2\
-                                                           + '_' + str(val)
+                                sim_new = replace_params(
+                                    copy.deepcopy(base), {key0: {key1: {key2: val}}}
+                                )
+                                sim_new["setup"]["name"] = (
+                                    key0 + "_" + key1 + "_" + key2 + "_" + str(val)
+                                )
                                 simulations.append(sim_new)
                         else:
-                            raise ValueError('To high depth in data dict.')
+                            raise ValueError("To high depth in data dict.")
 
     return simulations

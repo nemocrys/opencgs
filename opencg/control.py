@@ -19,35 +19,35 @@ def load_config(config_file):
 
 def execute_multiple(simulations):
     count = multiprocessing.cpu_count()
-    if platform.system() == 'Windows':
+    if platform.system() == "Windows":
         count -= 1
-    print('Working on ', count, ' cores.')
+    print("Working on ", count, " cores.")
     pool = multiprocessing.Pool(processes=count)
     pool.map(execute_sim, simulations)
+
 
 def execute_sim(simulation):
     simulation.execute()
 
 
-
-
-
 def execute(simulations):
     count = multiprocessing.cpu_count()
-    if platform.system() == 'Windows':
+    if platform.system() == "Windows":
         count -= 1
-    print('Working on ', count, ' cores.')
+    print("Working on ", count, " cores.")
     pool = multiprocessing.Pool(processes=count)
     pool.starmap(execute_simulation, simulations.items())
 
+
 def execute_simulation(sim_name, sim_dir):
-    print('Starting simulation ', sim_dir, ' ...')
-    run_elmer_grid(sim_dir, sim_name + '.msh')
+    print("Starting simulation ", sim_dir, " ...")
+    run_elmer_grid(sim_dir, sim_name + ".msh")
     run_elmer_solver(sim_dir)
     # post_processing(sim_path)
     err, warn, stats = scan_logfile(sim_dir)
     print(err, warn, stats)
-    print('Finished simulation ', sim_dir, ' .')
+    print("Finished simulation ", sim_dir, " .")
+
 
 # def create_simulations(config):
 #     if type(config) is str:
@@ -105,7 +105,7 @@ def execute_simulation(sim_name, sim_dir):
 
 
 if __name__ == "__main__":
-    config = './examples/config.yml'
+    config = "./examples/config.yml"
     create_transient_simulation(config)
     # simulations = create_simulations('./examples/config.yml')
     # execute(simulations)
