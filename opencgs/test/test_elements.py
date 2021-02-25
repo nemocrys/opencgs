@@ -3,7 +3,7 @@
 # tests for elements.py
 
 import copy
-from pyelmer.elements import Node, Triangle2nd, Line2nd
+from opencgs.elements import Node, Triangle2nd, Line2nd
 
 # simple input data
 n1 = Node(0, 0, 0, 0)

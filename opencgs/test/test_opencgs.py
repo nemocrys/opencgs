@@ -1,5 +1,5 @@
 from pyelmer.gmsh_objects import Model
-import opencg.geo.czochralski as cz
+import opencgs.geo.czochralski as cz
 
 
 def test_crucible():

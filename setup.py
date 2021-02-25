@@ -7,7 +7,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="opencg",
+    name="opencgs",
     version=versioneer.get_version(),
     cmdclass=versioneer.get_cmdclass(),
     author="Arved Enders-Seidlitz",
@@ -15,8 +15,8 @@ setuptools.setup(
     description="Open source crystal growth simulations.",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/nemocrys/opencg",
-    packages=["opencg", "opencg.geo", "opencg.test"],
+    url="https://github.com/nemocrys/opencgs",
+    packages=["opencgs", "opencgs.geo", "opencgs.test"],
     include_package_data=True,
     package_data={"": ["data/*.yml"]},
     classifiers=[

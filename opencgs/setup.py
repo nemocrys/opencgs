@@ -3,7 +3,7 @@ import numpy as np
 import os
 import yaml
 
-from opencg.post import HeatfluxSurf
+from opencgs.post import HeatfluxSurf
 import pyelmer.elmer as elmer
 
 

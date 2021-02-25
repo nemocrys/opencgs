@@ -6,7 +6,7 @@ import subprocess
 import yaml
 import numpy as np
 
-# from opencg.parameter_study import *
+# from opencgs.parameter_study import *
 
 from pyelmer.execute import run_elmer_solver, run_elmer_grid
 from pyelmer.post import scan_logfile

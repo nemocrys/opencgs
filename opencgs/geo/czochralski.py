@@ -3,7 +3,7 @@ import yaml
 from pyelmer.gmsh_objects import Shape
 from pyelmer.gmsh_utils import *
 
-from opencg import setup
+from opencgs import setup
 
 # TODO stl import
 

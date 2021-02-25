@@ -1,2 +1,2 @@
-# opencg
-Open source crystal growth simulations.
+# opencgs
+Open source crystal growth simulation.
