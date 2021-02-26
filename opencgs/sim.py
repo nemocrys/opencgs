@@ -150,6 +150,7 @@ class Simulation:
         print("Finished post processing.")
 
     def post(self):
+        """Simulation specific post processing."""
         pass
 
     @staticmethod
@@ -224,12 +225,18 @@ class SteadyStateSim(Simulation):
             base_dir,
             with_date,
         )
-        self.sim_config["general"]["transient"] = False
+        self.sim_config["general"][
+            "transient"
+        ] = False  # TODO this may not appear in 01_input!
         self._create_setup(visualize)
 
     def post(self):
         print("evaluating heat fluxes")
-        post.heat_flux(self.sim_dir, self.res_dir)
+        try:
+            post.heat_flux(self.sim_dir, self.res_dir)
+        except Exception as exc:
+            print("Could not evaluate heat fluxes :(")
+            print(exc)
 
 
 class TransientSim(Simulation):
@@ -248,10 +255,19 @@ class TransientSim(Simulation):
         timesteps_per_dl=10,
         dt_out_factor=1,
         visualize=False,
+        with_date=True,
         **_,
     ):
         super().__init__(
-            geo, geo_config, sim, sim_config, config_update, sim_name, "st", base_dir
+            geo,
+            geo_config,
+            sim,
+            sim_config,
+            config_update,
+            sim_name,
+            "st",
+            base_dir,
+            with_date,
         )
         self.l_start = l_start
         self.l_end = l_end
@@ -372,6 +388,7 @@ class TransientSubSim(Simulation):
 class ParameterStudy(Simulation):
     def __init__(
         self,
+        SimulationClass,
         geo,
         geo_config,
         sim,
@@ -384,6 +401,14 @@ class ParameterStudy(Simulation):
         with_date=True,
         **_,
     ):
+        if SimulationClass == SteadyStateSim:
+            type_str = "ps"
+        elif SimulationClass == TransientSim:
+            type_str = "pt"
+        else:
+            raise TypeError(
+                f"SimulationClass {SimulationClass} not supported in parameter study."
+            )
         super().__init__(
             geo,
             geo_config,
@@ -391,16 +416,16 @@ class ParameterStudy(Simulation):
             sim_config,
             config_update,
             sim_name,
-            "ps",
+            type_str,
             base_dir,
             with_date=with_date,
         )
         with open(self.input_dir + "/study_params.yml", "w") as f:
             yaml.dump(study_params, f)
         self.sims = []
-        self.create_sims(study_params, create_permutations)
+        self.create_sims(SimulationClass, study_params, create_permutations)
 
-    def create_sims(self, study_params, create_permutations):
+    def create_sims(self, SimulationClass, study_params, create_permutations):
         keys, vals = self._create_param_lists(study_params)
         print("updating the following parameters:", keys, vals)
         if create_permutations:
@@ -416,7 +441,7 @@ class ParameterStudy(Simulation):
                     for j in range(len(key_list) - 1):
                         config_update = {key_list[-(j + 2)]: config_update}
                     sim_name = ";".join(key_list) + f"={val}"
-                    sim = SteadyStateSim(
+                    sim = SimulationClass(
                         self.geo,
                         self.geo_config,
                         self.sim,
