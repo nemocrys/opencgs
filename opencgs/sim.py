@@ -1,12 +1,16 @@
 from copy import deepcopy
 from datetime import datetime
 import inspect
+import multiprocessing
 import numpy as np
 import os
 import pandas as pd
+import platform
 import shutil
 import yaml
 
+import opencgs
+import pyelmer
 from pyelmer.execute import run_elmer_solver, run_elmer_grid
 from pyelmer.post import scan_logfile
 
@@ -35,6 +39,7 @@ class Simulation:
         self.sim_name = sim_name
         self.sim_type = sim_type
         self._create_directories(base_dir, with_date)
+        self._archive_input()
         self.results_file = f"{self.sim_dir}/case.result"
 
     def _create_directories(self, base_dir, with_date):
@@ -58,11 +63,11 @@ class Simulation:
         os.mkdir(self.res_dir)
         os.mkdir(self.plot_dir)
 
-    def _create_setup(
-        self, visualize=False
-    ):  # TODO write metadata (package version opencgs, pyelmer, git-hashes,...)
+    def _create_setup(self, visualize=False):
         model = self.geo(self.geo_config, self.sim_dir, self.sim_name, visualize)
         self.sim(model, self.sim_config, self.sim_dir)
+
+    def _archive_input(self):
         with open(self.input_dir + "/geo.yml", "w") as f:
             yaml.dump(self.geo_config, f)
         with open(self.input_dir + "/sim.yml", "w") as f:
@@ -74,6 +79,9 @@ class Simulation:
         else:
             shutil.copy2(geo_file, self.input_dir + "/setup_geo.py")
             shutil.copy2(geo_file, self.input_dir + "/setup_sim.py")
+        metadada = {"opencgs": opencgs.__version__, "pyelmer": pyelmer.__version__}
+        with open(self.input_dir + "/metadata.yml", "w") as f:
+            yaml.dump(metadada, f)
 
     @staticmethod
     def _read_names_file(names_file, skip_rows=7):  # TODO move to pyelmer
@@ -199,7 +207,7 @@ class SteadyStateSim(Simulation):
         base_dir="./simdata",
         visualize=False,
         with_date=True,
-        **kwargs,
+        **_,
     ):
         super().__init__(
             geo,
@@ -235,7 +243,7 @@ class TransientSim(Simulation):
         timesteps_per_dl=10,
         dt_out_factor=1,
         visualize=False,
-        **kwargs,
+        **_,
     ):
         super().__init__(
             geo, geo_config, sim, sim_config, config_update, sim_name, "st", base_dir
@@ -354,3 +362,90 @@ class TransientSubSim(Simulation):
         self.geo_config["phase_if"] = old.phase_interface
         shutil.copy2(f"{old.sim_dir}/result.msh", f"{self.sim_dir}/input.msh")
         self._create_setup(visualize)
+
+
+class ParameterStudy(Simulation):
+    def __init__(
+        self,
+        geo,
+        geo_config,
+        sim,
+        sim_config,
+        config_update,
+        study_params,
+        create_permutations=False,
+        sim_name="opencgs-simulation",
+        base_dir="./simdata",
+        with_date=True,
+        **_,
+    ):
+        super().__init__(
+            geo,
+            geo_config,
+            sim,
+            sim_config,
+            config_update,
+            sim_name,
+            "ps",
+            base_dir,
+            with_date=with_date,
+        )
+        with open(self.input_dir + "/study_params.yml", "w") as f:
+            yaml.dump(study_params, f)
+        self.sims = []
+        self.create_sims(study_params, create_permutations)
+
+    def create_sims(self, study_params, create_permutations):
+        keys, vals = self._create_param_lists(study_params)
+        print("updating the following parameters:", keys, vals)
+        if create_permutations:
+            # TODO create permutations!
+            NotImplementedError(
+                "Permutations for parameter studies are not available yet."
+            )
+        else:
+            for i in range(len(keys)):
+                key_list = keys[i]
+                for val in vals[i]:
+                    config_update = {key_list[-1]: val}
+                    for j in range(len(key_list) - 1):
+                        config_update = {key_list[-(j + 2)]: config_update}
+                    sim_name = ";".join(key_list) + f"={val}"
+                    sim = SteadyStateSim(
+                        self.geo,
+                        self.geo_config,
+                        self.sim,
+                        self.sim_config,
+                        config_update,
+                        sim_name,
+                        self.sim_dir,
+                        with_date=False,
+                    )
+                    self.sims.append(sim)
+
+    def _create_param_lists(self, study_params, previous_keys=[]):
+        keys = []
+        vals = []
+        for key, val in study_params.items():
+            if type(val) is dict:
+                k, v = self._create_param_lists(val, previous_keys + [key])
+                keys += k
+                vals += v
+            elif type(val) is list:
+                keys.append(previous_keys + [key])
+                vals.append(val)
+            else:
+                raise ValueError("Wrong format in study_parameters!")
+        return keys, vals
+
+    def execute(self):
+        count = multiprocessing.cpu_count()
+        if platform.system() == "Windows":
+            count -= 1
+        print("Working on ", count, " cores.")
+        pool = multiprocessing.Pool(processes=count)
+        pool.map(ParameterStudy._execute_sim, self.sims)
+
+    @staticmethod
+    def _execute_sim(simulation):
+        simulation.execute()

@@ -30,6 +30,7 @@ def execute_sim(simulation):
     simulation.execute()
 
 
+# TODO check if required for sim-demo-fz, otherwise remove
 def execute(simulations):
     count = multiprocessing.cpu_count()
     if platform.system() == "Windows":
@@ -39,6 +40,7 @@ def execute(simulations):
     pool.starmap(execute_simulation, simulations.items())
 
 
+# TODO check if required for sim-demo-fz, otherwise remove
 def execute_simulation(sim_name, sim_dir):
     print("Starting simulation ", sim_dir, " ...")
     run_elmer_grid(sim_dir, sim_name + ".msh")
@@ -105,7 +107,4 @@ def execute_simulation(sim_name, sim_dir):
 
 
 if __name__ == "__main__":
-    config = "./examples/config.yml"
-    create_transient_simulation(config)
-    # simulations = create_simulations('./examples/config.yml')
-    # execute(simulations)
+    pass
