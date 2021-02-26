@@ -66,12 +66,12 @@ class ElmerSetupCz:
         self._heat_flux_dict = {}
 
     def __getitem__(self, name):
-        for body in self.sim.bodies:
-            if body == name:
-                return self.sim.bodies[name]
         for boundary in self.sim.boundaries:
             if boundary == name:
                 return self.sim.boundaries[name]
+        for body in self.sim.bodies:
+            if body == name:
+                return self.sim.bodies[name]
 
     def _set_equations(self):
         # solvers
@@ -241,7 +241,7 @@ class ElmerSetupCz:
         if self._crystal is None:
             raise ValueError("No crystal was added to the model.")
         # Body for phase change solver
-        phase_if = elmer.Body(self.sim, shape.name, [shape.ph_id])
+        phase_if = elmer.Body(self.sim, "melt_crystal_if", [shape.ph_id])
         phase_if.material = self._crystal.material
         phase_if.equation = self._eqn_phase_change
         phase_if.initial_condition = elmer.InitialCondition(self.sim, "t0_phase_change")
@@ -250,7 +250,7 @@ class ElmerSetupCz:
             "PhaseSurface": "Real 0.0",
         }
         # Boundary condition
-        bc_phase_if = elmer.Boundary(self.sim, "melt_crystal_if", [shape.ph_id])
+        bc_phase_if = elmer.Boundary(self.sim, shape.name, [shape.ph_id])
         bc_phase_if.save_line = True
         bc_phase_if.normal_target_body = self.sim.bodies[crystal.name]
         if self.heat_control and not self.smart_heater["control-point"]:

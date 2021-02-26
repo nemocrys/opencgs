@@ -10,6 +10,7 @@ import shutil
 import yaml
 
 import opencgs
+from opencgs import post
 import pyelmer
 from pyelmer.execute import run_elmer_solver, run_elmer_grid
 from pyelmer.post import scan_logfile
@@ -143,10 +144,13 @@ class Simulation:
         err, warn, stats = scan_logfile(self.sim_dir)
         print(err, warn, stats)
         print("Finished simulation ", self.root_dir, " .")
-        print("Evaluating probes...")
+        print("Post processing...")
         self._postprocessing_probes()
+        self.post()
+        print("Finished post processing.")
 
-        print("Probes evaluated")
+    def post(self):
+        pass
 
     @staticmethod
     def _update_config(base_config, config_update):
@@ -223,8 +227,9 @@ class SteadyStateSim(Simulation):
         self.sim_config["general"]["transient"] = False
         self._create_setup(visualize)
 
-    def post():
-        pass
+    def post(self):
+        print("evaluating heat fluxes")
+        post.heat_flux(self.sim_dir, self.res_dir)
 
 
 class TransientSim(Simulation):
@@ -440,11 +445,20 @@ class ParameterStudy(Simulation):
 
     def execute(self):
         count = multiprocessing.cpu_count()
+        # TODO not sure if that's a good idea...
         if platform.system() == "Windows":
             count -= 1
         print("Working on ", count, " cores.")
         pool = multiprocessing.Pool(processes=count)
         pool.map(ParameterStudy._execute_sim, self.sims)
+        for sim in self.sims:
+            for f in os.listdir(sim.res_dir):
+                ext = f.split(".")[-1]
+                if ext in ["yaml", "yml"]:
+                    shutil.copy2(
+                        f"{sim.res_dir}/{f}",
+                        f"{self.res_dir}/{f[:-(len(ext) + 1)]}_{sim.sim_name}.{ext}",
+                    )
 
     @staticmethod
     def _execute_sim(simulation):
