@@ -1,6 +1,7 @@
 from copy import deepcopy
 from datetime import datetime
 import inspect
+import matplotlib.pyplot as plt
 import multiprocessing
 import numpy as np
 import os
@@ -238,6 +239,15 @@ class SteadyStateSim(Simulation):
             print("Could not evaluate heat fluxes :(")
             print(exc)
 
+    @property
+    def T_tp(self):
+        try:
+            with open(f"{self.res_dir}/probes.yml", "r") as f:
+                res = yaml.safe_load(f)
+            return res["res triple point temperature"]
+        except FileNotFoundError:
+            return 0.0
+
 
 class TransientSim(Simulation):
     def __init__(
@@ -393,10 +403,10 @@ class ParameterStudy(Simulation):
         geo_config,
         sim,
         sim_config,
-        config_update,
         study_params,
+        config_update={},
         create_permutations=False,
-        sim_name="opencgs-simulation",
+        sim_name="opencgs-parameter-study",
         base_dir="./simdata",
         with_date=True,
         **_,
@@ -488,3 +498,201 @@ class ParameterStudy(Simulation):
     @staticmethod
     def _execute_sim(simulation):
         simulation.execute()
+
+
+class DiameterIteration(Simulation):
+    def __init__(
+        self,
+        geo,
+        geo_config,
+        sim,
+        sim_config,
+        T_tp,
+        r_min,
+        r_max,
+        max_iterations=10,
+        dT_max=0.01,
+        config_update={},
+        sim_name="opencgs-diameter-iteration",
+        base_dir="./simdata",
+        with_date=True,
+        **_,
+    ):
+        super().__init__(
+            geo,
+            geo_config,
+            sim,
+            sim_config,
+            config_update,
+            sim_name,
+            "di",
+            base_dir,
+            with_date,
+        )
+        if (
+            self.sim_config["smart-heater"]
+            and not self.sim_config["smart-heater"]["control-point"]
+        ):
+            raise ValueError(
+                "Smart heater with control at triple point. Iteration useless."
+            )
+        self.T_tp = T_tp
+        self.r_min = r_min
+        self.r_max = r_max
+        self.max_iterations = max_iterations
+        self.dT_max = dT_max
+
+    def execute(self):
+        # initial simulations
+        geo_config = deepcopy(self.geo_config)
+        geo_config["crystal"]["r"] = self.r_min
+        sim_r_min = SteadyStateSim(
+            self.geo,
+            geo_config,
+            self.sim,
+            self.sim_config,
+            sim_name=f"r={self.r_min}",
+            base_dir=self.sim_dir,
+            with_date=False,
+        )
+        sim_r_min.execute()
+        T_rmin = sim_r_min.T_tp
+        geo_config = deepcopy(self.geo_config)
+        geo_config["crystal"]["r"] = self.r_max
+        sim_r_max = SteadyStateSim(
+            self.geo,
+            geo_config,
+            self.sim,
+            self.sim_config,
+            sim_name=f"r={self.r_max}",
+            base_dir=self.sim_dir,
+            with_date=False,
+        )
+        sim_r_max.execute()
+        T_rmax = sim_r_max.T_tp
+        # evaluate
+        print(f"r-min: {self.r_min} m - T = {T_rmin:5f} K")
+        print(f"r-max: {self.r_max} m - T = {T_rmax:5f} K")
+        Ttp_r = {}  # triple point temperature : radius
+        Ttp_r.update({T_rmin: self.r_min})
+        Ttp_r.update({T_rmax: self.r_max})
+        self.export_Ttp_r(Ttp_r)
+        if not T_rmin <= self.T_tp <= T_rmax:
+            print("Diameter fitting impossible with current setup.")
+            print("Interpolated radius would be", self.compute_new_r(Ttp_r), "m.")
+            with open(f"{self.res_dir}/iteration-summary.yml", "w") as f:
+                yaml.dump(self.T_tp, f)
+        # iteration
+        converged = False
+        for i in range(self.max_iterations):
+            print("Diameter iteration", i + 1)
+            r_new = self.compute_new_r(Ttp_r)
+            print("new radius:", r_new)
+            if not (self.r_min < r_new < self.r_max):
+                print("ERROR: Interpolation not possible.")
+                break
+            geo_config = deepcopy(self.geo_config)
+            geo_config["crystal"]["r"] = r_new
+            sim = SteadyStateSim(
+                self.geo,
+                geo_config,
+                self.sim,
+                self.sim_config,
+                sim_name=f"r={r_new}",
+                base_dir=self.sim_dir,
+                with_date=False,
+            )
+            sim.execute()
+            Ttp_new = sim.T_tp
+            print("corresponding TP temperature:", Ttp_new)
+            Ttp_r.update({Ttp_new: r_new})
+            self.export_Ttp_r(Ttp_r)
+            if np.abs(Ttp_new - self.Ttp) <= self.dT_max:
+                print("Iteration finished.")
+                print("Crystal radius =", r_new, "m.")
+                print("TP Temperature =", Ttp_new, "K")
+                converged = True
+                break
+
+        results = {
+            "converged": converged,
+            "iterations": i + 1,
+            "dT at TP": Ttp_new - self.T_tp,
+            "Ttp_r": Ttp_r,
+        }
+        if converged:
+            results.update({"radius": r_new})
+            shutil.copytree(sim.root_dir, "{self.res_dir}/{sim.name}")
+        with open(f"{self.res_dir}/iteration-summary.yml", "w") as f:
+            yaml.dump(results, f)
+        self.plot(Ttp_r)
+
+    def plot(self, Ttp_r):
+        fig, ax = plt.subplots(1, 2, figsize=(5.75, 3))
+        ax[0].plot(list(Ttp_r.keys()), "x-")
+        ax[0].set_xlabel("simulation")
+        ax[0].set_ylabel("temperature at triple point [K]")
+        ax[0].grid()
+        T_tps_sorted = {
+            k: v for k, v in sorted(Ttp_r.items(), key=lambda item: item[1])
+        }
+        ax[1].plot(list(T_tps_sorted.values()), list(T_tps_sorted.keys()), "x-")
+        ax[1].set_xlabel("crystal radius [m]")
+        ax[1].set_ylabel("temperature at triple point [K]")
+        ax[1].grid()
+        fig.tight_layout()
+        fig.savefig(f"{self.res_dir}/diameter-iteration.png")
+        plt.close(fig)
+
+    def compute_new_r(self, Ttp_r):
+        T_tps = np.fromiter(Ttp_r.keys(), float)
+        rs = np.fromiter(Ttp_r.values(), float)
+        # ignore failed simulations (if possible)
+        T_tps_new = np.array([T for T in T_tps if T > 0.0])
+        if len(T_tps_new) >= 2:
+            T_tps = T_tps_new
+        # try to INTERpolate
+        T1 = 0.0
+        T2 = self.T_tp * 2
+        for T in T_tps:
+            if T1 < T < self.T_tp:
+                T1 = T
+            else:
+                T2 = T
+        try:
+            r1 = Ttp_r[T1]
+            r2 = Ttp_r[T2]
+            r_new = r1 + (r2 - r1) / (T2 - T1) * (self.T_tp - T1)
+            r_new = round(float(r_new), 8)
+            if r_new == rs[-1]:
+                print(
+                    "WARNING: Non-linearity, tanking value from last iteration for interpolation."
+                )
+                if T_tps[-1] < self.T_tp:
+                    T1 = T_tps[-1]
+                    r1 = Ttp_r[T1]
+                else:
+                    T2 = T_tps[-1]
+                    r2 = Ttp_r[T2]
+        except KeyError:
+            print("Warning: Could not interpolate!")
+        # EXTRApolate if necessary
+        if T1 == 0.0:
+            T_diff = sorted(T_tps - self.T_tp)
+            T1 = T_diff[0]
+            T2 = T_diff[1]
+        if T2 == self.T_tp * 2:
+            T_diff = sorted(T_tps - self.T_tp)
+            T1 = T_diff[-2]
+            T2 = T_diff[-1]
+        r_new = r1 + (r2 - r1) / (T2 - T1) * (self.T_tp - T1)
+        r_new = round(float(r_new), 8)
+        print("selected points for interpolation")
+        print(Ttp_r)
+        print("T1 =", T1)
+        print("T2 =", T2)
+        return r_new
+
+    def export_Ttp_r(self, Ttp_r):
+        with open(f"{self.res_dir}/Ttp_r.yml", "w") as f:
+            yaml.dump(Ttp_r, f, sort_keys=False)
