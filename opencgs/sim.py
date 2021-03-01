@@ -257,13 +257,13 @@ class TransientSim(Simulation):
         sim,
         sim_config,
         config_update={},
-        sim_name="opencgs-simulation",
-        base_dir="./simdata",
         l_start=0.01,
         l_end=0.1,
         d_l=3e-3,
         timesteps_per_dl=10,
         dt_out_factor=1,
+        sim_name="opencgs-simulation",
+        base_dir="./simdata",
         visualize=False,
         with_date=True,
         **_,
@@ -409,12 +409,14 @@ class ParameterStudy(Simulation):
         sim_name="opencgs-parameter-study",
         base_dir="./simdata",
         with_date=True,
-        **_,
+        **kwargs,
     ):
         if SimulationClass == SteadyStateSim:
             type_str = "ps"
         elif SimulationClass == TransientSim:
             type_str = "pt"
+        elif SimulationClass == DiameterIteration:
+            type_str = 'pd'
         else:
             raise TypeError(
                 f"SimulationClass {SimulationClass} not supported in parameter study."
@@ -433,9 +435,9 @@ class ParameterStudy(Simulation):
         with open(self.input_dir + "/study_params.yml", "w") as f:
             yaml.dump(study_params, f)
         self.sims = []
-        self.create_sims(SimulationClass, study_params, create_permutations)
+        self.create_sims(SimulationClass, study_params, create_permutations, kwargs)
 
-    def create_sims(self, SimulationClass, study_params, create_permutations):
+    def create_sims(self, SimulationClass, study_params, create_permutations, kwargs):
         keys, vals = self._create_param_lists(study_params)
         print("updating the following parameters:", keys, vals)
         if create_permutations:
@@ -453,13 +455,14 @@ class ParameterStudy(Simulation):
                     sim_name = ";".join(key_list) + f"={val}"
                     sim = SimulationClass(
                         self.geo,
-                        self.geo_config,
+                        deepcopy(self.geo_config),
                         self.sim,
-                        self.sim_config,
-                        config_update,
-                        sim_name,
-                        self.sim_dir,
+                        deepcopy(self.sim_config),
+                        config_update=config_update,
+                        sim_name=sim_name,
+                        base_dir=self.sim_dir,
                         with_date=False,
+                        **kwargs,
                     )
                     self.sims.append(sim)
 
@@ -507,12 +510,12 @@ class DiameterIteration(Simulation):
         geo_config,
         sim,
         sim_config,
-        T_tp,
-        r_min,
-        r_max,
+        config_update={},
+        T_tp=505,
+        r_min=0.001,
+        r_max=0.02,
         max_iterations=10,
         dT_max=0.01,
-        config_update={},
         sim_name="opencgs-diameter-iteration",
         base_dir="./simdata",
         with_date=True,
@@ -607,7 +610,7 @@ class DiameterIteration(Simulation):
             print("corresponding TP temperature:", Ttp_new)
             Ttp_r.update({Ttp_new: r_new})
             self.export_Ttp_r(Ttp_r)
-            if np.abs(Ttp_new - self.Ttp) <= self.dT_max:
+            if np.abs(Ttp_new - self.T_tp) <= self.dT_max:
                 print("Iteration finished.")
                 print("Crystal radius =", r_new, "m.")
                 print("TP Temperature =", Ttp_new, "K")
@@ -620,11 +623,11 @@ class DiameterIteration(Simulation):
             "dT at TP": Ttp_new - self.T_tp,
             "Ttp_r": Ttp_r,
         }
-        if converged:
-            results.update({"radius": r_new})
-            shutil.copytree(sim.root_dir, "{self.res_dir}/{sim.name}")
         with open(f"{self.res_dir}/iteration-summary.yml", "w") as f:
             yaml.dump(results, f)
+        if converged:
+            results.update({"radius": r_new})
+            shutil.copytree(sim.root_dir, f"{self.res_dir}/{sim.sim_name}")
         self.plot(Ttp_r)
 
     def plot(self, Ttp_r):
