@@ -1,5 +1,4 @@
-from pyelmer.gmsh_objects import Shape
-from pyelmer.gmsh_utils import *
+from pyelmer.gmsh import *
 
 
 def line_from_points(model, points, name="line"):

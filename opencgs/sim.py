@@ -416,7 +416,7 @@ class ParameterStudy(Simulation):
         elif SimulationClass == TransientSim:
             type_str = "pt"
         elif SimulationClass == DiameterIteration:
-            type_str = 'pd'
+            type_str = "pd"
         else:
             raise TypeError(
                 f"SimulationClass {SimulationClass} not supported in parameter study."

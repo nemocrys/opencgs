@@ -1,7 +1,6 @@
 import yaml
 
-from pyelmer.gmsh_objects import Shape
-from pyelmer.gmsh_utils import *
+from pyelmer.gmsh import *
 
 from opencgs import setup
 
