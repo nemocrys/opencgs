@@ -23,7 +23,7 @@ def heat_flux(sim_dir, res_dir, plot=False, save=True, normal_proj=True):
     vtu = []
     for f in files:
         ending = f.split(".")[-1]
-        if ending == "msh":
+        if ending == "msh" and f != "result.msh":
             msh = f
         if ending == "vtu":
             vtu.append(f)
@@ -265,3 +265,10 @@ def heat_flux(sim_dir, res_dir, plot=False, save=True, normal_proj=True):
     if plot:
         plt.show()
     return fig2, ax2, fluxes
+
+
+if __name__ == "__main__":
+    # for debug purposes
+    base_dir = "./simdata/xxx
+    sim_dir = base_dir + "/02_simulation"
+    heat_flux(base_dir + "/02_simulation", base_dir + "/03_results", plot=True)

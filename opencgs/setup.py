@@ -25,6 +25,7 @@ class ElmerSetupCz:
         smart_heater={},
         probes={},
         transient_setup={},
+        solver_update={},
     ):
         self.heat_control = heat_control
         self.heat_convection = heat_convection
@@ -33,6 +34,7 @@ class ElmerSetupCz:
         self.transient = transient
         self.sim_dir = sim_dir
         self.v_pull = v_pull
+        self.solver_update = solver_update
         if phase_change:
             self.mesh_update = True
         elif transient:
@@ -77,22 +79,22 @@ class ElmerSetupCz:
         # solvers
         if self.heating_induction:
             omega = 2 * np.pi * self.heating["frequency"]
-            solver_statmag = elmer.load_solver("StatMagSolver", self.sim, SOLVER_FILE)
-            solver_statmag.data.update({"Angular Frequency": omega})
-        solver_heat = elmer.load_solver("HeatSolver", self.sim, SOLVER_FILE)
+            self.solver_statmag = elmer.load_solver("StatMagSolver", self.sim, SOLVER_FILE)
+            self.solver_statmag.data.update({"Angular Frequency": omega})
+        self.solver_heat = elmer.load_solver("HeatSolver", self.sim, SOLVER_FILE)
         if self.transient and self.heat_control:
-            solver_heat.data.update({"Smart Heater Time Scale": self.smart_heater_t})
+            self.solver_heat.data.update({"Smart Heater Time Scale": self.smart_heater_t})
         if self.phase_change:
             if False:
                 # if self.transient: TODO
-                solver_phase_change = elmer.load_solver(
+                self.solver_phase_change = elmer.load_solver(
                     "TransientPhaseChange", self.sim, SOLVER_FILE
                 )
             else:
-                solver_phase_change = elmer.load_solver(
+                self.solver_phase_change = elmer.load_solver(
                     "SteadyPhaseChange", self.sim, SOLVER_FILE
                 )
-                solver_phase_change.data["Triple Point Fixed"] = "Logical True"
+                self.solver_phase_change.data["Triple Point Fixed"] = "Logical True"
         if self.mesh_update:
             solver_mesh = elmer.load_solver("MeshUpdate", self.sim, SOLVER_FILE)
         if self.probes != {}:
@@ -118,16 +120,16 @@ class ElmerSetupCz:
         # equations
         if self.heating_induction:
             equation_main = elmer.Equation(
-                self.sim, "equation_main", [solver_statmag, solver_heat]
+                self.sim, "equation_main", [self.solver_statmag, self.solver_heat]
             )
         else:
-            equation_main = elmer.Equation(self.sim, "main_equation", [solver_heat])
+            equation_main = elmer.Equation(self.sim, "main_equation", [self.solver_heat])
         if self.transient or self.phase_change:
             equation_main.solvers.append(solver_mesh)
         self._eqn_main = equation_main
         if self.phase_change:
             equation_phase_change = elmer.Equation(
-                self.sim, "equation_phase_change", [solver_phase_change]
+                self.sim, "equation_phase_change", [self.solver_phase_change]
             )
             self._eqn_phase_change = equation_phase_change
         else:
@@ -272,6 +274,21 @@ class ElmerSetupCz:
             boundary.mesh_update = movement
 
     def export(self):
+        if "global" in self.solver_update:
+            self.sim.settings.update(self.solver_update["global"])
+        if "all-solvers" in self.solver_update:
+            self.solver_heat.data.update(self.solver_update["all-solvers"])
+            if self.heating_induction:
+                self.solver_statmag.data.update(self.solver_update["all-solvers"])
+            if self.phase_change:
+                self.solver_phase_change.data.update(self.solver_update["all-solvers"])
+        if "solver-heat" in self.solver_update:
+            self.solver_heat.data.update(self.solver_update["solver-heat"])
+        if "solver-statmag" in self.solver_update:
+            self.solver_statmag.data.update(self.solver_update["solver-statmag"])
+        if "solver-phase-change" in self.solver_update:
+            self.solver_phase_change.data.update(self.solver_update["solver-phase-change"])
+
         self.sim.write_startinfo(self.sim_dir)
         self.sim.write_sif(self.sim_dir)
         self.sim.write_boundary_ids(self.sim_dir)
