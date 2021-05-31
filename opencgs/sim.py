@@ -21,7 +21,8 @@ from pyelmer.post import scan_logfile
 
 
 # for documentation of applied versions
-PACKAGES = ["gmsh", "matplotlib", "numpy", "opencgs", "pandas", "pyelmer"]
+PACKAGES = ["gmsh", "matplotlib", "numpy", "pandas", "pyelmer"]
+
 
 class Simulation:
     def __init__(
@@ -89,6 +90,9 @@ class Simulation:
             shutil.copy2(geo_file, self.input_dir + "/setup_geo.py")
             shutil.copy2(geo_file, self.input_dir + "/setup_sim.py")
         metadada = {"parent metadata": metadata, "python": sys.version}
+        metadada.update(
+            {"opencgs": opencgs.__version__}
+        )  # don't use importlib, it doesn't get the correct version number in editable mode
         for pkg in PACKAGES:
             metadada.update({pkg: version(pkg)})
         with open(self.input_dir + "/metadata.yml", "w") as f:
@@ -293,7 +297,16 @@ class TransientSim(Simulation):
             metadata,
         )
         with open(self.input_dir + "/transientsim_params.yml", "w") as f:
-            yaml.dump({'l_start': l_start, 'l_end': l_end, 'd_l': d_l, 'timesteps_per_dl': timesteps_per_dl, 'dt_out_factor': dt_out_factor}, f)
+            yaml.dump(
+                {
+                    "l_start": l_start,
+                    "l_end": l_end,
+                    "d_l": d_l,
+                    "timesteps_per_dl": timesteps_per_dl,
+                    "dt_out_factor": dt_out_factor,
+                },
+                f,
+            )
         self.l_start = l_start
         self.l_end = l_end
         self.d_l = d_l
@@ -560,7 +573,16 @@ class DiameterIteration(Simulation):
                 "Smart heater with control at triple point. Iteration useless."
             )
         with open(self.input_dir + "/di_params.yml", "w") as f:
-            yaml.dump({"T_tp": T_tp, "r_min": r_min, "r_max": r_max, "max_iterations": max_iterations, "dT_max": dT_max}, f)
+            yaml.dump(
+                {
+                    "T_tp": T_tp,
+                    "r_min": r_min,
+                    "r_max": r_max,
+                    "max_iterations": max_iterations,
+                    "dT_max": dT_max,
+                },
+                f,
+            )
         self.T_tp = T_tp
         self.r_min = r_min
         self.r_max = r_max

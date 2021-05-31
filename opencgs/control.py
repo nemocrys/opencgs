@@ -13,9 +13,18 @@ from pyelmer.post import scan_logfile
 
 
 def get_git_metadata():
-    git_origin = subprocess.check_output(["git", "config", "--get", "remote.origin.url"]).strip().decode("utf-8")
-    git_label = subprocess.check_output(["git", "describe", "--tags", "--dirty", "--always"]).strip().decode("utf-8")
+    git_origin = (
+        subprocess.check_output(["git", "config", "--get", "remote.origin.url"])
+        .strip()
+        .decode("utf-8")
+    )
+    git_label = (
+        subprocess.check_output(["git", "describe", "--tags", "--dirty", "--always"])
+        .strip()
+        .decode("utf-8")
+    )
     return {"git origin": git_origin, "git label": git_label}
+
 
 def load_config(config_file):
     with open(config_file) as f:
