@@ -283,7 +283,7 @@ class ElmerSetupCz:
     def heat_flux_computation(self, body, boundary):
         # TODO that's a way too complicated!
         hfs = HeatfluxSurf(
-            boundary.surface_ids[0],
+            boundary.geo_ids[0],
             body.body_ids,
             body.material.data["Heat Conductivity"],
         )

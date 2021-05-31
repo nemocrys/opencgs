@@ -1,6 +1,8 @@
 from copy import deepcopy
 from datetime import datetime
 import inspect
+from importlib.metadata import version
+import matplotlib
 import matplotlib.pyplot as plt
 import multiprocessing
 import numpy as np
@@ -8,6 +10,7 @@ import os
 import pandas as pd
 import platform
 import shutil
+import sys
 import yaml
 
 import opencgs
@@ -16,6 +19,9 @@ import pyelmer
 from pyelmer.execute import run_elmer_solver, run_elmer_grid
 from pyelmer.post import scan_logfile
 
+
+# for documentation of applied versions
+PACKAGES = ["gmsh", "matplotlib", "numpy", "opencgs", "pandas", "pyelmer"]
 
 class Simulation:
     def __init__(
@@ -29,6 +35,7 @@ class Simulation:
         sim_type,
         base_dir,
         with_date=True,
+        metadata="",
     ):
         self.geo = geo
         if "geometry" in config_update:
@@ -41,7 +48,7 @@ class Simulation:
         self.sim_name = sim_name
         self.sim_type = sim_type
         self._create_directories(base_dir, with_date)
-        self._archive_input()
+        self._archive_input(metadata)
         self.results_file = f"{self.sim_dir}/case.result"
 
     def _create_directories(self, base_dir, with_date):
@@ -69,7 +76,7 @@ class Simulation:
         model = self.geo(self.geo_config, self.sim_dir, self.sim_name, visualize)
         self.sim(model, self.sim_config, self.sim_dir)
 
-    def _archive_input(self):
+    def _archive_input(self, metadata):
         with open(self.input_dir + "/geo.yml", "w") as f:
             yaml.dump(self.geo_config, f)
         with open(self.input_dir + "/sim.yml", "w") as f:
@@ -81,9 +88,11 @@ class Simulation:
         else:
             shutil.copy2(geo_file, self.input_dir + "/setup_geo.py")
             shutil.copy2(geo_file, self.input_dir + "/setup_sim.py")
-        metadada = {"opencgs": opencgs.__version__, "pyelmer": pyelmer.__version__}
+        metadada = {"parent metadata": metadata, "python": sys.version}
+        for pkg in PACKAGES:
+            metadada.update({pkg: version(pkg)})
         with open(self.input_dir + "/metadata.yml", "w") as f:
-            yaml.dump(metadada, f)
+            yaml.dump(metadada, f, sort_keys=False)
 
     @staticmethod
     def _read_names_file(names_file, skip_rows=7):  # TODO move to pyelmer
@@ -213,6 +222,7 @@ class SteadyStateSim(Simulation):
         base_dir="./simdata",
         visualize=False,
         with_date=True,
+        metadata="",
         **_,
     ):
         super().__init__(
@@ -225,6 +235,7 @@ class SteadyStateSim(Simulation):
             "ss",
             base_dir,
             with_date,
+            metadata,
         )
         self.sim_config["general"][
             "transient"
@@ -266,6 +277,7 @@ class TransientSim(Simulation):
         base_dir="./simdata",
         visualize=False,
         with_date=True,
+        metadata="",
         **_,
     ):
         super().__init__(
@@ -278,7 +290,10 @@ class TransientSim(Simulation):
             "st",
             base_dir,
             with_date,
+            metadata,
         )
+        with open(self.input_dir + "/transientsim_params.yml", "w") as f:
+            yaml.dump({'l_start': l_start, 'l_end': l_end, 'd_l': d_l, 'timesteps_per_dl': timesteps_per_dl, 'dt_out_factor': dt_out_factor}, f)
         self.l_start = l_start
         self.l_end = l_end
         self.d_l = d_l
@@ -409,6 +424,7 @@ class ParameterStudy(Simulation):
         sim_name="opencgs-parameter-study",
         base_dir="./simdata",
         with_date=True,
+        metadata="",
         **kwargs,
     ):
         if SimulationClass == SteadyStateSim:
@@ -431,6 +447,7 @@ class ParameterStudy(Simulation):
             type_str,
             base_dir,
             with_date=with_date,
+            metadata=metadata,
         )
         with open(self.input_dir + "/study_params.yml", "w") as f:
             yaml.dump(study_params, f)
@@ -442,6 +459,7 @@ class ParameterStudy(Simulation):
         print("updating the following parameters:", keys, vals)
         if create_permutations:
             # TODO create permutations!
+            # use numpy meshgrid?
             NotImplementedError(
                 "Permutations for parameter studies are not available yet."
             )
@@ -519,6 +537,7 @@ class DiameterIteration(Simulation):
         sim_name="opencgs-diameter-iteration",
         base_dir="./simdata",
         with_date=True,
+        metadata="",
         **_,
     ):
         super().__init__(
@@ -531,6 +550,7 @@ class DiameterIteration(Simulation):
             "di",
             base_dir,
             with_date,
+            metadata,
         )
         if (
             self.sim_config["smart-heater"]
@@ -539,6 +559,8 @@ class DiameterIteration(Simulation):
             raise ValueError(
                 "Smart heater with control at triple point. Iteration useless."
             )
+        with open(self.input_dir + "/di_params.yml", "w") as f:
+            yaml.dump({"T_tp": T_tp, "r_min": r_min, "r_max": r_max, "max_iterations": max_iterations, "dT_max": dT_max}, f)
         self.T_tp = T_tp
         self.r_min = r_min
         self.r_max = r_max
