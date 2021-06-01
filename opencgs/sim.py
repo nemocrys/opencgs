@@ -172,7 +172,11 @@ class Simulation:
     def post(self):
         err, warn, stats = scan_logfile(self.sim_dir)
         with open(self.res_dir + "/elmer_summary.yml", "w") as f:
-            yaml.dump({"Errors": err, "Warnings": warn, "Statistics": stats}, f, sort_keys=False)
+            yaml.dump(
+                {"Errors": err, "Warnings": warn, "Statistics": stats},
+                f,
+                sort_keys=False,
+            )
 
     @staticmethod
     def _update_config(base_config, config_update):
@@ -428,7 +432,16 @@ class TransientSubSim(Simulation):
         visualize=False,
     ):
         super().__init__(
-            geo, geo_config, sim, sim_config, mat_config, {}, sim_name, "ts", base_dir, False
+            geo,
+            geo_config,
+            sim,
+            sim_config,
+            mat_config,
+            {},
+            sim_name,
+            "ts",
+            base_dir,
+            False,
         )
         self.sim_config["general"]["transient"] = True
         self.sim_config["transient"]["t_max"] = t_end
@@ -538,6 +551,13 @@ class ParameterStudy(Simulation):
         print("Working on ", count, " cores.")
         pool = multiprocessing.Pool(processes=count)
         pool.map(ParameterStudy._execute_sim, self.sims)
+        self.post()
+
+    @staticmethod
+    def _execute_sim(simulation):
+        simulation.execute()
+
+    def post(self):
         for sim in self.sims:
             for f in os.listdir(sim.res_dir):
                 ext = f.split(".")[-1]
@@ -546,10 +566,7 @@ class ParameterStudy(Simulation):
                         f"{sim.res_dir}/{f}",
                         f"{self.res_dir}/{f[:-(len(ext) + 1)]}_{sim.sim_name}.{ext}",
                     )
-
-    @staticmethod
-    def _execute_sim(simulation):
-        simulation.execute()
+        post.parameter_study(self.sim_dir, self.plot_dir)
 
 
 class DiameterIteration(Simulation):

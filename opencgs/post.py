@@ -16,7 +16,23 @@ class HeatfluxSurf:  # surface with heat flux
     lmbd: float
 
 
-# TODO copied from sim-elmerthermo. Review!
+@dataclass
+class Simulation:
+    dir: str
+    name: str
+    val: float
+
+    @property
+    def probes(self):
+        with open(self.dir + "/03_results/probes.yml") as f:
+            return yaml.safe_load(f)
+
+    @property
+    def heat_fluxes(self):
+        with open(self.dir + "/03_results/heat-fluxes.yml") as f:
+            return yaml.safe_load(f)
+
+
 def heat_flux(sim_dir, res_dir, plot=False, save=True, normal_proj=True):
     # import data
     files = os.listdir(sim_dir)
@@ -267,8 +283,56 @@ def heat_flux(sim_dir, res_dir, plot=False, save=True, normal_proj=True):
     return fig2, ax2, fluxes
 
 
+def parameter_study(sim_dir, plot_dir):
+    # scan directory
+    simulation_dirs = os.listdir(sim_dir)
+    param_sweeps = {}
+    for sim in simulation_dirs:
+        param = "_".join(sim.split("_")[1:]).split("=")[0]
+        value = float(sim.split("=")[-1])
+        simulation = Simulation(f"{sim_dir}/{sim}", param, value)
+        if param not in param_sweeps:
+            param_sweeps.update({param: {value: simulation}})
+        else:
+            param_sweeps[param].update({value: simulation})
+    for param, sim_dict in param_sweeps.items():
+        if len(param_sweeps) == 1:
+            plot_dir_ = plot_dir
+        else:
+            plot_dir_ = f"{plot_dir}/{param}"
+            os.mkdir(plot_dir_)
+        for probe in next(iter(sim_dict.values())).probes:
+            fig, ax = plt.subplots(1, 1)
+            x = []
+            y = []
+            for val in sorted(sim_dict):
+                x.append(val)
+                y.append(sim_dict[val].probes[probe])
+            ax.plot(x, y, "x-")
+            ax.grid(linestyle=":")
+            ax.set_xlabel(param)
+            ax.set_ylabel(probe)
+            fig.tight_layout()
+            fig.savefig(f"{plot_dir_}/pb_{probe}.png")
+            plt.close(fig)
+        for hf in next(iter(sim_dict.values())).heat_fluxes:
+            fig, ax = plt.subplots(1, 1)
+            x = []
+            y = []
+            for val in sorted(sim_dict):
+                x.append(val)
+                y.append(sim_dict[val].heat_fluxes[hf])
+            ax.plot(x, y, "x-")
+            ax.grid(linestyle=":")
+            ax.set_xlabel(param)
+            ax.set_ylabel(hf)
+            fig.tight_layout()
+            fig.savefig(f"{plot_dir_}/hf_{hf}.png")
+            plt.close(fig)
+
+
 if __name__ == "__main__":
     # for debug purposes
     base_dir = "./simdata/xxx"
     sim_dir = base_dir + "/02_simulation"
-    heat_flux(base_dir + "/02_simulation", base_dir + "/03_results", plot=True)
+    parameter_study(base_dir + "/02_simulation", base_dir + "/04_plots")

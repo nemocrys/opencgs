@@ -26,7 +26,7 @@ class ElmerSetupCz:
         probes={},
         transient_setup={},
         solver_update={},
-        materials_dict={}
+        materials_dict={},
     ):
         self.heat_control = heat_control
         self.heat_convection = heat_convection
@@ -81,11 +81,15 @@ class ElmerSetupCz:
         # solvers
         if self.heating_induction:
             omega = 2 * np.pi * self.heating["frequency"]
-            self.solver_statmag = elmer.load_solver("StatMagSolver", self.sim, SOLVER_FILE)
+            self.solver_statmag = elmer.load_solver(
+                "StatMagSolver", self.sim, SOLVER_FILE
+            )
             self.solver_statmag.data.update({"Angular Frequency": omega})
         self.solver_heat = elmer.load_solver("HeatSolver", self.sim, SOLVER_FILE)
         if self.transient and self.heat_control:
-            self.solver_heat.data.update({"Smart Heater Time Scale": self.smart_heater_t})
+            self.solver_heat.data.update(
+                {"Smart Heater Time Scale": self.smart_heater_t}
+            )
         if self.phase_change:
             if False:
                 # if self.transient: TODO
@@ -125,7 +129,9 @@ class ElmerSetupCz:
                 self.sim, "equation_main", [self.solver_statmag, self.solver_heat]
             )
         else:
-            equation_main = elmer.Equation(self.sim, "main_equation", [self.solver_heat])
+            equation_main = elmer.Equation(
+                self.sim, "main_equation", [self.solver_heat]
+            )
         if self.transient or self.phase_change:
             equation_main.solvers.append(solver_mesh)
         self._eqn_main = equation_main
@@ -293,7 +299,9 @@ class ElmerSetupCz:
         if "solver-statmag" in self.solver_update:
             self.solver_statmag.data.update(self.solver_update["solver-statmag"])
         if "solver-phase-change" in self.solver_update:
-            self.solver_phase_change.data.update(self.solver_update["solver-phase-change"])
+            self.solver_phase_change.data.update(
+                self.solver_update["solver-phase-change"]
+            )
 
         self.sim.write_startinfo(self.sim_dir)
         self.sim.write_sif(self.sim_dir)
