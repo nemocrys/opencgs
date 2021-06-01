@@ -26,6 +26,7 @@ class ElmerSetupCz:
         probes={},
         transient_setup={},
         solver_update={},
+        materials_dict={}
     ):
         self.heat_control = heat_control
         self.heat_convection = heat_convection
@@ -35,6 +36,7 @@ class ElmerSetupCz:
         self.sim_dir = sim_dir
         self.v_pull = v_pull
         self.solver_update = solver_update
+        self.materials_dict = materials_dict
         if phase_change:
             self.mesh_update = True
         elif transient:
@@ -225,9 +227,13 @@ class ElmerSetupCz:
     def add_material(self, name, setup_file=""):
         if name in self.sim.materials:
             return self.sim.materials[name]
-        if setup_file == "":
-            setup_file = MATERIAL_FILE
-        material = elmer.load_material(name, self.sim, setup_file)
+        if name in self.materials_dict:
+            print(f"using material {name} from self.materials_dict")
+            material = elmer.Material(self.sim, name, self.materials_dict[name])
+        else:
+            if setup_file == "":
+                setup_file = MATERIAL_FILE
+            material = elmer.load_material(name, self.sim, setup_file)
         # remove properties not required for simulation
         if "Beta" in material.data:
             material.data.pop("Beta")

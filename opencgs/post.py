@@ -269,6 +269,6 @@ def heat_flux(sim_dir, res_dir, plot=False, save=True, normal_proj=True):
 
 if __name__ == "__main__":
     # for debug purposes
-    base_dir = "./simdata/xxx
+    base_dir = "./simdata/xxx"
     sim_dir = base_dir + "/02_simulation"
     heat_flux(base_dir + "/02_simulation", base_dir + "/03_results", plot=True)

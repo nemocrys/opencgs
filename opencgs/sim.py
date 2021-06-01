@@ -31,6 +31,7 @@ class Simulation:
         geo_config,
         sim,
         sim_config,
+        mat_config,
         config_update,
         sim_name,
         sim_type,
@@ -46,6 +47,9 @@ class Simulation:
         if "simulation" in config_update:
             sim_config = self._update_config(sim_config, config_update["simulation"])
         self.sim_config = sim_config
+        if "materials" in config_update:
+            mat_config = self._update_config(mat_config, config_update["materials"])
+        self.mat_config = mat_config
         self.sim_name = sim_name
         self.sim_type = sim_type
         self._create_directories(base_dir, with_date)
@@ -75,13 +79,15 @@ class Simulation:
 
     def _create_setup(self, visualize=False):
         model = self.geo(self.geo_config, self.sim_dir, self.sim_name, visualize)
-        self.sim(model, self.sim_config, self.sim_dir)
+        self.sim(model, self.sim_config, self.sim_dir, self.mat_config)
 
     def _archive_input(self, metadata):
         with open(self.input_dir + "/geo.yml", "w") as f:
             yaml.dump(self.geo_config, f)
         with open(self.input_dir + "/sim.yml", "w") as f:
             yaml.dump(self.sim_config, f)
+        with open(self.input_dir + "/mat.yml", "w") as f:
+            yaml.dump(self.mat_config, f)
         geo_file = inspect.getfile(self.geo)
         sim_file = inspect.getfile(self.sim)
         if geo_file == sim_file:
@@ -164,8 +170,9 @@ class Simulation:
         print("Finished post processing.")
 
     def post(self):
-        """Simulation specific post processing."""
-        pass
+        err, warn, stats = scan_logfile(self.sim_dir)
+        with open(self.res_dir + "/elmer_summary.yml", "w") as f:
+            yaml.dump({"Errors": err, "Warnings": warn, "Statistics": stats}, f, sort_keys=False)
 
     @staticmethod
     def _update_config(base_config, config_update):
@@ -221,6 +228,7 @@ class SteadyStateSim(Simulation):
         geo_config,
         sim,
         sim_config,
+        mat_config={},
         config_update={},
         sim_name="opencgs-simulation",
         base_dir="./simdata",
@@ -234,6 +242,7 @@ class SteadyStateSim(Simulation):
             geo_config,
             sim,
             sim_config,
+            mat_config,
             config_update,
             sim_name,
             "ss",
@@ -247,6 +256,7 @@ class SteadyStateSim(Simulation):
         self._create_setup(visualize)
 
     def post(self):
+        super().post()
         print("evaluating heat fluxes")
         try:
             post.heat_flux(self.sim_dir, self.res_dir)
@@ -271,6 +281,7 @@ class TransientSim(Simulation):
         geo_config,
         sim,
         sim_config,
+        mat_config={},
         config_update={},
         l_start=0.01,
         l_end=0.1,
@@ -289,6 +300,7 @@ class TransientSim(Simulation):
             geo_config,
             sim,
             sim_config,
+            mat_config,
             config_update,
             sim_name,
             "st",
@@ -339,6 +351,7 @@ class TransientSim(Simulation):
             geo_config,
             self.sim,
             sim_config,
+            deepcopy(self.mat_config),
             sim_name="initialization",
             base_dir=self.sim_dir,
             with_date=False,
@@ -369,6 +382,7 @@ class TransientSim(Simulation):
                 geo_config,
                 self.sim,
                 sim_config,
+                deepcopy(self.mat_config),
                 sim_name=f"iteration_{i}",
                 base_dir=self.sim_dir,
                 visualize=self.visualize,
@@ -408,12 +422,13 @@ class TransientSubSim(Simulation):
         geo_config,
         sim,
         sim_config,
+        mat_config,
         sim_name,
         base_dir,
         visualize=False,
     ):
         super().__init__(
-            geo, geo_config, sim, sim_config, {}, sim_name, "ts", base_dir, False
+            geo, geo_config, sim, sim_config, mat_config, {}, sim_name, "ts", base_dir, False
         )
         self.sim_config["general"]["transient"] = True
         self.sim_config["transient"]["t_max"] = t_end
@@ -431,6 +446,7 @@ class ParameterStudy(Simulation):
         geo_config,
         sim,
         sim_config,
+        mat_config,
         study_params,
         config_update={},
         create_permutations=False,
@@ -455,6 +471,7 @@ class ParameterStudy(Simulation):
             geo_config,
             sim,
             sim_config,
+            mat_config,
             config_update,
             sim_name,
             type_str,
@@ -489,6 +506,7 @@ class ParameterStudy(Simulation):
                         deepcopy(self.geo_config),
                         self.sim,
                         deepcopy(self.sim_config),
+                        deepcopy(self.mat_config),
                         config_update=config_update,
                         sim_name=sim_name,
                         base_dir=self.sim_dir,
