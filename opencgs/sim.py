@@ -158,7 +158,7 @@ class Simulation:
 
     def execute(self):
         print("Starting simulation ", self.root_dir, " ...")
-        run_elmer_grid(self.sim_dir, self.sim_name + ".msh")
+        run_elmer_grid(self.sim_dir, "case.msh")
         run_elmer_solver(self.sim_dir)
         # post_processing(sim_path)
         err, warn, stats = scan_logfile(self.sim_dir)
