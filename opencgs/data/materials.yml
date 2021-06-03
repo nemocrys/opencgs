@@ -67,7 +67,7 @@ insulation:
   Relative Permittivity: 1
 steel-1.4541:
   Density: 7900.0  # 20°C
-  Electric Conductivity: 1.37e+3
+  Electric Conductivity: 1.37e+6  # 20°C
   Emissivity: 0.2  # 200°C
   Heat Capacity:  470.0 # 20°C
   Heat Conductivity: 15.0 # 20°C
