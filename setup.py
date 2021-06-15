@@ -26,6 +26,7 @@ setuptools.setup(
     ],
     install_requires=[
         #'gmsh',
+        "meshio",
         "pandas",
         "pyyaml",
         "pyelmer",
