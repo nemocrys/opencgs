@@ -177,6 +177,24 @@ def crystal(
     phase_if=None,
     name="crystal",
 ):
+    """[summary]
+
+    Args:
+        model ([type]): [description]
+        dim ([type]): [description]
+        r ([type]): [description]
+        l ([type]): [description]
+        char_l (int, optional): [description]. Defaults to 0.
+        T_init (float, optional): [description]. Defaults to 273.15.
+        X0 (list, optional): [description]. Defaults to [0, 0].
+        material (str, optional): [description]. Defaults to "".
+        melt ([type], optional): [description]. Defaults to None.
+        phase_if ([type], optional): [description]. Defaults to None.
+        name (str, optional): [description]. Defaults to "crystal".
+
+    Returns:
+        [type]: [description]
+    """
     crys = Shape(model, dim, name)
     crys.params.r = r
     crys.params.l = l

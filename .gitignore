@@ -9,3 +9,4 @@
 *.names
 *.log
 *.egg-info
+doc/_build/

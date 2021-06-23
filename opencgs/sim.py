@@ -25,6 +25,7 @@ PACKAGES = ["gmsh", "matplotlib", "numpy", "pandas", "pyelmer"]
 
 
 class Simulation:
+    """In this class base functionality for all different kinds of simulations is collected."""
     def __init__(
         self,
         geo,
@@ -39,6 +40,21 @@ class Simulation:
         with_date=True,
         metadata="",
     ):
+        """Create a base simulation.
+
+        Args:
+            geo (function): function for geometry generation
+            geo_config (dict): configuration for geo
+            sim (function): function for simulation setup
+            sim_config (dict): configuration for sim
+            mat_config (dict): material configuration
+            config_update (dict): changes for geo_config, sim_config, mat_config
+            sim_name (str): simulation name
+            sim_type (str): abbreviation of simulation type in two letters
+            base_dir (str): path of base directory
+            with_date (bool, optional): Include date in simulation directory name. Defaults to True.
+            metadata (str, optional): Metadata to be saved, e.g git-hash of parent repository. Defaults to "".
+        """
         self.geo = geo
         if "geometry" in config_update:
             geo_config = self._update_config(geo_config, config_update["geometry"])
