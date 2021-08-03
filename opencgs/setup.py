@@ -4,9 +4,9 @@ import os
 import yaml
 
 from opencgs.post import HeatfluxSurf
-import pyelmer.elmer as elmer
+import pyelmer.elmerkw as elmer
 
-
+SIMULATION_FILE = os.path.dirname(os.path.realpath(__file__)) + "/data/simulations.yml"
 SOLVER_FILE = os.path.dirname(os.path.realpath(__file__)) + "/data/solvers.yml"
 MATERIAL_FILE = os.path.dirname(os.path.realpath(__file__)) + "/data/materials.yml"
 
@@ -51,7 +51,7 @@ class ElmerSetupCz:
             except KeyError:
                 self.smart_heater_t = transient_setup["dt"]
         else:
-            self.sim = elmer.load_simulation("axi-symmetric_steady")
+            self.sim = elmer.load_simulation("axi-symmetric_steady", SIMULATION_FILE)
             self.sim.settings.update({"Output Intervals": 0})
 
         self.heating = heating
