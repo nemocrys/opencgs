@@ -530,12 +530,13 @@ class ParameterStudy(Simulation):
                     for j in range(len(key_list) - 1):
                         config_update = {key_list[-(j + 2)]: config_update}
                     sim_name = ";".join(key_list) + f"={val}"
+                    print(kwargs)
                     sim = SimulationClass(
-                        self.geo,
-                        deepcopy(self.geo_config),
-                        self.sim,
-                        deepcopy(self.sim_config),
-                        deepcopy(self.mat_config),
+                        geo=self.geo,
+                        geo_config=deepcopy(self.geo_config),
+                        sim=self.sim,
+                        sim_config=deepcopy(self.sim_config),
+                        mat_config=deepcopy(self.mat_config),
                         config_update=config_update,
                         sim_name=sim_name,
                         base_dir=self.sim_dir,
@@ -592,6 +593,7 @@ class DiameterIteration(Simulation):
         geo_config,
         sim,
         sim_config,
+        mat_config,
         config_update={},
         T_tp=505,
         r_min=0.001,
@@ -609,6 +611,7 @@ class DiameterIteration(Simulation):
             geo_config,
             sim,
             sim_config,
+            mat_config,
             config_update,
             sim_name,
             "di",
