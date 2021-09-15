@@ -16,12 +16,13 @@ class ElmerSetupCz:
         self,
         heat_control,
         heat_convection,
-        heating_induction,
         phase_change,
         transient,
         heating,
         sim_dir,
         v_pull=0,
+        heating_induction=False,
+        heating_resistance=False,
         smart_heater={},
         probes={},
         transient_setup={},
@@ -30,11 +31,12 @@ class ElmerSetupCz:
     ):
         self.heat_control = heat_control
         self.heat_convection = heat_convection
-        self.heating_induction = heating_induction
         self.phase_change = phase_change
         self.transient = transient
         self.sim_dir = sim_dir
         self.v_pull = v_pull
+        self.heating_induction = heating_induction
+        self.heating_resistance = heating_resistance
         self.solver_update = solver_update
         self.materials_dict = materials_dict
         if phase_change:
@@ -63,8 +65,10 @@ class ElmerSetupCz:
         if self.heating_induction:
             self.smart_heater = smart_heater
             self._set_joule_heat()
-        else:
-            pass  # TODO resistance heating body force
+        if self.heating_resistance:
+            if self.heating_induction:
+                raise ValueError("Simultaneous incuction and resistance heating not supported.")
+            self.smart_heater = smart_heater
 
         self._crystal = None
         self._heat_flux_dict = {}
@@ -186,6 +190,21 @@ class ElmerSetupCz:
         self._current = elmer.BodyForce(self.sim, "Current Density")
         self._current.current_density = self.heating["current"] / shape.params.area
         self._inductor = self.add_body(shape, material, self._current)
+
+    def add_resistance_heater(self, shape, material=""):
+        self._resistance_heating = elmer.BodyForce(self.sim, "resistance_heating")
+        self._resistance_heating.heat_source = 1  # TODO set proper power_per_kilo?
+        self._resistance_heating.integral_heat_source = self.heating["power"]
+        if self.heat_control:
+            self._resistance_heating.smart_heat_control = True
+            if self.smart_heater["control-point"]:
+                self._resistance_heating.smart_heater_control_point = [
+                    self.smart_heater["x"],
+                    self.smart_heater["y"],
+                    self.smart_heater["z"],
+                ]
+                self._resistance_heating.smart_heater_T = self.smart_heater["T"]
+        self._heater = self.add_body(shape, material, self._resistance_heating)
 
     def add_body(self, shape, material="", force=None):
         body = elmer.Body(self.sim, shape.name, [shape.ph_id])
