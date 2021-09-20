@@ -1,9 +1,9 @@
 # USAGE INSTSRUCTIONS
 # 
 # Build image (run this in the main directory (where .git folder is)):
-# docker build -t opencgs -f .\Docker\Dockerfile .
+# docker build -t opencgs -f ./Docker/Dockerfile .
 # or
-# docker build --no-cache -t opencgs -f .\Docker\Dockerfile .
+# docker build --no-cache -t opencgs -f ./Docker/Dockerfile .
 #
 # Run image:
 # docker run -it opencgs
@@ -69,7 +69,8 @@ RUN apt-get -y install \
         scipy==1.6.*\
         pandas==1.2.*\
         pyyaml==5.4.*\
-        pyelmer==0.3.*
+        pyelmer==0.3.*\
+        objectgmsh==0.*
 
 # Install gmsh & dependencies
 # istructions found here: https://fenicsproject.discourse.group/t/problem-with-installation-of-latest-gmsh-4-6-0-via-pip/4078/2
