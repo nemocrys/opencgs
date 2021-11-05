@@ -17,7 +17,7 @@ class ElmerSetupCz:
         heat_control,
         heat_convection,
         phase_change,
-        transient,
+        transient,  # TODO make this optional
         heating,
         sim_dir,
         v_pull=0,
