@@ -1,15 +1,17 @@
 # USAGE INSTSRUCTIONS
 # 
 # Build image (run this in the main directory (where .git folder is)):
-# docker build -t opencgs -f ./Docker/Dockerfile .
+# docker build -t nemocrys/opencgs:vX.X.X -f ./Docker/Dockerfile .
 # or
-# docker build --no-cache -t opencgs -f ./Docker/Dockerfile .
+# docker build --no-cache -t nemocrys/opencgs:vX.X.X -f ./Docker/Dockerfile .
 #
 # Run image:
-# docker run -it opencgs
+# docker run -it --rm nemocrys/opencgs:vX.X.X
 #
-# Run image and map current directory to home/wdir:
-# docker run -it --mount type=bind,source="$(pwd)",target=/home/wdir opencgs
+# Run image and map current directory to home/workdir on Linux:
+# docker run -it --rm -v $PWD:/home/workdir -e LOCAL_UID=$(id -u $USER) -e LOCAL_GID=$(id -g $USER) nemocrys/opencgs:vX.X.X /bin/bash
+# and on Windows:
+# docker run -it --rm -v ${PWD}:/home/workdir nemocrys/opencgs:vX.X.X /bin/bash
 
 FROM ubuntu:20.04
 
@@ -93,5 +95,24 @@ COPY  . /home/opencgs
 RUN cd /home/opencgs &&\
     pip3 install -e .
 
-RUN mkdir /home/wdir
-WORKDIR /home/wdir
+# Install additional utilities
+RUN apt-get install -y mc && \
+    mkdir scripts && \
+    cd scripts && \
+    echo "source /usr/lib/mc/mc-wrapper.sh" >> mc && \
+    chmod +x mc
+
+# ENV PATH=/home/scripts:$PATH
+# ENV HOME=/home/wdir
+RUN mkdir /home/workdir
+
+# # create user
+# RUN adduser --disabled-password --gecos '' user
+# USER user
+
+WORKDIR /home/workdir
+
+# modify user id and group
+# see https://techflare.blog/permission-problems-in-bind-mount-in-docker-volume/
+RUN apt-get -y install gosu 
+ENTRYPOINT [ "/home/opencgs/Docker/entrypoint.sh" ]
