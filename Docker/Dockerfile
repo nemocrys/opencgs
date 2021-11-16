@@ -6,12 +6,12 @@
 # docker build --no-cache -t nemocrys/opencgs:vX.X.X -f ./Docker/Dockerfile .
 #
 # Run image:
-# docker run -it --rm nemocrys/opencgs:vX.X.X
+# docker run -it --rm nemocrys/opencgs:vX.X.X bash
 #
 # Run image and map current directory to home/workdir on Linux:
-# docker run -it --rm -v $PWD:/home/workdir -e LOCAL_UID=$(id -u $USER) -e LOCAL_GID=$(id -g $USER) nemocrys/opencgs:vX.X.X /bin/bash
+# docker run -it --rm -v $PWD:/home/workdir -e LOCAL_UID=$(id -u $USER) -e LOCAL_GID=$(id -g $USER) nemocrys/opencgs:vX.X.X bash
 # and on Windows:
-# docker run -it --rm -v ${PWD}:/home/workdir nemocrys/opencgs:vX.X.X /bin/bash
+# docker run -it --rm -v ${PWD}:/home/workdir nemocrys/opencgs:vX.X.X bash
 
 FROM ubuntu:20.04
 
