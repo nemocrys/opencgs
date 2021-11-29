@@ -102,8 +102,7 @@ RUN apt-get install -y mc && \
     echo "source /usr/lib/mc/mc-wrapper.sh" >> mc && \
     chmod +x mc
 
-# ENV PATH=/home/scripts:$PATH
-# ENV HOME=/home/wdir
+ENV PATH=/home/scripts:$PATH
 RUN mkdir /home/workdir
 
 # # create user
