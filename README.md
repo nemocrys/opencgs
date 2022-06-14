@@ -1,6 +1,6 @@
 # opencgs
 
-Validated open source crystal growth simulation.
+Open source crystal growth simulation.
 
 The project is developed and maintained by the [**Model experiments group**](https://www.ikz-berlin.de/en/research/materials-science/section-fundamental-description#c486) at the Leibniz Institute for Crystal Growth (IKZ).
 
@@ -14,8 +14,6 @@ If you use this code in your research, please cite our article (available with o
 This package provides an interface to set up crystal growth simulations using open source software. Currently, the focus is set on Czochralski growth (and some of the functionality is tailored to it). Nevertheless, opencgs may also be useful for other applications. opencgs is validated within the [NEMOCRYS project](https://www.researchgate.net/project/NEMOCRYS-Next-Generation-Multiphysical-Models-for-Crystal-Growth-Processes) using model experiments.
 
 Currently, the focus of opencgs is on 2D axisymmetric thermal simulation (including inductive heating) using the software Elmer. Further extension, e.g., for 3D domains or thermal stresses computation is planned.
-
-A paper showing the capability of opencgs for Czochralski growth simulation has been submitted.
 
 ## Usage
 
