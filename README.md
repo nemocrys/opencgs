@@ -7,7 +7,7 @@ The project is developed and maintained by the [**Model experiments group**](htt
 ### Referencing
 If you use this code in your research, please cite our article (available with open access):
 
-> A. Enders-Seidlitz, J. Pal, and K. Dadzis, Development and validation of a thermal simulation for the Czochralski crystal growth process using model experiments *Journal of Crystal Growth*, In Press. https://doi.org/10.1088/1757-899X/1223/1/012003.
+> A. Enders-Seidlitz, J. Pal, and K. Dadzis, Development and validation of a thermal simulation for the Czochralski crystal growth process using model experiments *Journal of Crystal Growth*, In Press. [https://doi.org/10.1016/j.jcrysgro.2022.126750](https://doi.org/10.1016/j.jcrysgro.2022.126750).
 > 
 ## Overview
 
@@ -58,7 +58,7 @@ In case of questions just open an issue or contact Arved Enders-Seidlitz.
 
 [This project](https://www.researchgate.net/project/NEMOCRYS-Next-Generation-Multiphysical-Models-for-Crystal-Growth-Processes) has received funding from the European Research Council (ERC) under the European Union's Horizon 2020 research and innovation programme (grant agreement No 851768).
 
-<img src="https://raw.githubusercontent.com/nemocrys/opencgs/master/EU-ERC.png">
+<img src="https://github.com/nemocrys/test-cz-induction/blob/main/EU-ERC.png">
 
 ## Contribution
 
