@@ -12,7 +12,6 @@ MATERIAL_FILE = os.path.dirname(os.path.realpath(__file__)) + "/data/materials.y
 
 
 
-# TODO remove transient
 class ElmerSetupCz:
     def __init__(
         self,
@@ -22,12 +21,10 @@ class ElmerSetupCz:
         heating,
         sim_dir,
         v_pull=0,
-        transient=False,  # TODO make this optional
         heating_induction=False,
         heating_resistance=False,
         smart_heater={},
         probes={},
-        transient_setup={},
         solver_update={},
         materials_dict={},
     ):
@@ -42,16 +39,12 @@ class ElmerSetupCz:
             heating (dict): configuration of respective heating 
             sim_dir (str): simulation directory file path
             v_pull (int, optional): pulling velocity. Defaults to 0.
-            transient (bool, optional): transient simulation. Defaults
-                to False.
             heating_resistance (bool, optional): furnace with resistance
                 heating. Defaults to False (= inductive heating ).
             smart_heater (dict, optional): heater control parameters.
                 Defaults to {}.
             probes (dict, optional): probe locations where temperatures
                 etc. are evaluated. Defaults to {}.
-            transient_setup (dict, optional): configuration for
-                transient simulation. Defaults to {}.
             solver_update (dict, optional): modified solver parameters.
                 Defaults to {}.
             materials_dict (dict, optional): material properties.
@@ -61,7 +54,6 @@ class ElmerSetupCz:
         self.heat_control = heat_control
         self.heat_convection = heat_convection
         self.phase_change = phase_change
-        self.transient = transient
         self.sim_dir = sim_dir
         self.v_pull = v_pull
         self.heating_induction = heating_induction
@@ -70,20 +62,11 @@ class ElmerSetupCz:
         self.materials_dict = materials_dict
         if phase_change:
             self.mesh_update = True
-        elif transient:
-            self.mesh_update = True
         else:
             self.mesh_update = False
 
-        if transient:
-            self.sim = self._setup_transient_sim(**transient_setup)
-            try:
-                self.smart_heater_t = transient_setup["smart_heater_t"]
-            except KeyError:
-                self.smart_heater_t = transient_setup["dt"]
-        else:
-            self.sim = elmer.load_simulation("axi-symmetric_steady", SIMULATION_FILE)
-            self.sim.settings.update({"Output Intervals": 0})
+        self.sim = elmer.load_simulation("axi-symmetric_steady", SIMULATION_FILE)
+        self.sim.settings.update({"Output Intervals": 0})
 
         self.heating = heating
         self.probes = probes
@@ -119,21 +102,11 @@ class ElmerSetupCz:
             )
             self.solver_statmag.data.update({"Angular Frequency": omega})
         self.solver_heat = elmer.load_solver("HeatSolver", self.sim, SOLVER_FILE)
-        if self.transient and self.heat_control:
-            self.solver_heat.data.update(
-                {"Smart Heater Time Scale": self.smart_heater_t}
-            )
         if self.phase_change:
-            if False:
-                # if self.transient: TODO
-                self.solver_phase_change = elmer.load_solver(
-                    "TransientPhaseChange", self.sim, SOLVER_FILE
-                )
-            else:
-                self.solver_phase_change = elmer.load_solver(
-                    "SteadyPhaseChange", self.sim, SOLVER_FILE
-                )
-                self.solver_phase_change.data["Triple Point Fixed"] = "Logical True"
+            self.solver_phase_change = elmer.load_solver(
+                "SteadyPhaseChange", self.sim, SOLVER_FILE
+            )
+            self.solver_phase_change.data["Triple Point Fixed"] = "Logical True"
         if self.mesh_update:
             solver_mesh = elmer.load_solver("MeshUpdate", self.sim, SOLVER_FILE)
         if self.probes != {}:
@@ -148,13 +121,9 @@ class ElmerSetupCz:
                 point_str += f"{self.probes[key][0]} {self.probes[key][1]}"
                 n += 1
             solver_probe_scalars.data.update({f"Save Coordinates({n},2)": point_str})
-        if self.transient:
-            # elmer.load_solver('Mesh2Mesh', self.sim, SOLVER_FILE)
-            elmer.load_solver("gmsh-input", self.sim, SOLVER_FILE)
         elmer.load_solver("SaveMaterials", self.sim, SOLVER_FILE)
         elmer.load_solver("ResultOutputSolver", self.sim, SOLVER_FILE)
         elmer.load_solver("SaveLine", self.sim, SOLVER_FILE)
-        elmer.load_solver("gmsh-output", self.sim, SOLVER_FILE)
 
         # equations
         if self.heating_induction:
@@ -165,7 +134,7 @@ class ElmerSetupCz:
             equation_main = elmer.Equation(
                 self.sim, "main_equation", [self.solver_heat]
             )
-        if self.transient or self.phase_change:
+        if self.phase_change:
             equation_main.solvers.append(solver_mesh)
         self._eqn_main = equation_main
         if self.phase_change:
@@ -190,29 +159,14 @@ class ElmerSetupCz:
                 joule_heat.smart_heater_T = self.smart_heater["T"]
         self._joule_heat = joule_heat
 
-    def _setup_transient_sim(self, dt, dt_out, t_max):
-        sim = elmer.load_simulation("axi-symmetric_transient")
-        sim.settings.update({"Timestep Sizes": dt})
-        sim.settings.update({"Output Intervals": round(dt_out / dt)})
-        sim.settings.update({"Timestep Intervals": round(t_max / dt)})
-        return sim
-
     @property
     def joule_heat(self):
         """Joule heat body force."""
         return self._joule_heat
 
     @property
-    def movement(self):
-        """Boundary condition for moving boundaries (trans. sim.)."""
-        if self.transient:
-            return [0, f'Variable Time\n    real MATC "{self.v_pull / 6e4 }*tx"']
-        else:
-            return [0, 0]
-
-    @property
     def distortion(self):
-        """Boundary condition for distorted boundaries (trans. sim.)."""
+        """Boundary condition for distorted boundaries."""
         return [0, None]
 
     def add_crystal(self, shape, material="", force=None):
@@ -223,8 +177,12 @@ class ElmerSetupCz:
             material (str, optional): material name. Defaults to "".
             force (elmer.BodyForce, optional): body force, e.g. joule
                 heat. Defaults to None.
+
+        Returns:
+            Body: pyelmer Body object.
         """
         self._crystal = self.add_body(shape, material, force)
+        return self._crystal
 
     def add_inductor(self, shape, material=""):
         """Add the inductor to the simulation (inductive heating).
@@ -232,10 +190,14 @@ class ElmerSetupCz:
         Args:
             shape (int): ID of the body
             material (str, optional): material name. Defaults to "".
+        
+        Returns:
+            Body: pyelmer Body object.
         """
         self._current = elmer.BodyForce(self.sim, "Current Density")
         self._current.current_density = self.heating["current"] / shape.params.area
         self._inductor = self.add_body(shape, material, self._current)
+        return self._inductor
 
     def add_resistance_heater(self, shape, material=""):
         """Add the resistance heater to the simulation. A constant
@@ -244,6 +206,9 @@ class ElmerSetupCz:
         Args:
             shape (Shape): objectgmsh shape object.
             material (str, optional): material name. Defaults to "".
+
+        Returns:
+            Body: pyelmer Body object.
         """
         self._resistance_heating = elmer.BodyForce(self.sim, "resistance_heating")
         self._resistance_heating.heat_source = 1  # TODO set proper power_per_kilo?
@@ -258,6 +223,7 @@ class ElmerSetupCz:
                 ]
                 self._resistance_heating.smart_heater_T = self.smart_heater["T"]
         self._heater = self.add_body(shape, material, self._resistance_heating)
+        return self._heater
 
     def add_body(self, shape, material="", force=None):
         """Add a body to the simulation.
@@ -385,6 +351,9 @@ class ElmerSetupCz:
 
         Args:
             shape (Shape): objectgmsh shape object.
+
+        Returns:
+            (Body, Boundary): pyelmer Body, Boundary object.
         """
         if not self.phase_change:
             raise ValueError("This Simulation does not include a phase change model.")
@@ -409,14 +378,11 @@ class ElmerSetupCz:
             bc_phase_if.smart_heater = True
             bc_phase_if.smart_heater_T = self.smart_heater["T"]
         if self.phase_change:
-            if False:
-                # if self.transient: # TODO
-                bc_phase_if.phase_change_transient = True
-            else:
-                bc_phase_if.phase_change_steady = True
+            bc_phase_if.phase_change_steady = True
             bc_phase_if.phase_change_vel = self.v_pull / 6e4  # mm/min to m/s
             bc_phase_if.material = self._crystal.material
             bc_phase_if.phase_change_body = phase_if
+        return phase_if, bc_phase_if
 
     def add_interface(self, shape, movement=[0, 0]):
         """Add a interface between to bodies to the simulation
@@ -425,10 +391,14 @@ class ElmerSetupCz:
             shape (Shape): objectgmsh shape object.
             movement (list, optional): Movement of the interface.
                 Defaults to [0, 0].
+
+        Returns:
+            Boundary: pyelmer Boundary object.
         """
         boundary = elmer.Boundary(self.sim, shape.name, [shape.ph_id])
         if self.mesh_update:
             boundary.mesh_update = movement
+        return boundary
 
     def export(self):
         """Create simulation setup and write Elmer sif file."""

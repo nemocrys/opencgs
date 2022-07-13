@@ -1,8 +1,7 @@
 import opencgs.control
 import opencgs.elements
 import opencgs.geo
-import opencgs.geo.czochralski
-import opencgs.geo.general
+import opencgs.geo
 import opencgs.post
 import opencgs.setup
 import opencgs.sim
