@@ -164,11 +164,6 @@ class ElmerSetupCz:
         """Joule heat body force."""
         return self._joule_heat
 
-    @property
-    def distortion(self):
-        """Boundary condition for distorted boundaries."""
-        return [0, None]
-
     def add_crystal(self, shape, material="", force=None):
         """Add the crystal to the simulation.
 

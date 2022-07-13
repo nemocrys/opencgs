@@ -304,9 +304,6 @@ class SteadyStateSim(Simulation):
             with_date,
             metadata,
         )
-        self.sim_config["general"][
-            "transient"
-        ] = False  # TODO this may not appear in 01_input!
         self._create_setup(visualize)
 
     def post(self):
@@ -381,8 +378,6 @@ class ParameterStudy(Simulation):
         """
         if SimulationClass == SteadyStateSim:
             type_str = "ps"
-        elif SimulationClass == TransientSim:
-            type_str = "pt"
         elif SimulationClass == DiameterIteration:
             type_str = "pd"
         else:

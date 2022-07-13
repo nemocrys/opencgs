@@ -134,15 +134,6 @@ SteadyPhaseChange:
   Variable: '"PhaseSurface"'
   Procedure: '"SteadyPhaseChange" "SteadyPhaseChange"'
   # Internal Mesh Movement: 'Logical True'
-TransientPhaseChange:
-  Equation: Transient Phase Change
-  Procedure: '"TransientPhaseChange" "TransientPhaseChange"'
-  Variable: '"PhaseSurface"'
-  Use Nodal Loads: Logical True
-  Triple Point Fixed: Logical True  # this modifies v-interface so that TP-Position remains constant
-  # Velocity Relaxation Factor
-  # Velocity Smoothing Factor
-  # Pull Rate Control -> if True it's adjusted so that TP-Position remains constant
 MeshUpdate:
   Equation: Mesh Update
   Linear System Solver: Iterative
