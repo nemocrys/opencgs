@@ -48,12 +48,16 @@ class Simulation:
             sim (function): function for simulation setup
             sim_config (dict): configuration for sim
             mat_config (dict): material configuration
-            config_update (dict): changes for geo_config, sim_config, mat_config
+            config_update (dict): changes for geo_config, sim_config,
+                mat_config
             sim_name (str): simulation name
-            sim_type (str): abbreviation of simulation type in two letters
+            sim_type (str): abbreviation of simulation type in two
+                letters
             base_dir (str): path of base directory
-            with_date (bool, optional): Include date in simulation directory name. Defaults to True.
-            metadata (str, optional): Metadata to be saved, e.g git-hash of parent repository. Defaults to "".
+            with_date (bool, optional): Include date in simulation
+                directory name. Defaults to True.
+            metadata (str, optional): Metadata to be saved, e.g git-hash
+                of parent repository. Defaults to "".
         """
         self.geo = geo
         if "geometry" in config_update:
@@ -173,6 +177,7 @@ class Simulation:
         df.to_csv(self.res_dir + "/probes.csv", index=False, sep=";")
 
     def execute(self):
+        """Execute the simulation."""
         print("Starting simulation ", self.root_dir, " ...")
         run_elmer_grid(self.sim_dir, "case.msh")
         run_elmer_solver(self.sim_dir)
@@ -186,6 +191,7 @@ class Simulation:
         print("Finished post processing.")
 
     def post(self):
+        """Run the post-processing."""
         err, warn, stats = scan_logfile(self.sim_dir)
         with open(self.res_dir + "/elmer_summary.yml", "w") as f:
             yaml.dump(
@@ -208,14 +214,17 @@ class Simulation:
 
     @property
     def vtu_files(self):
+        """List of file-path's to vtus with simulation results."""
         return [f for f in os.listdir(self.sim_dir) if f.split(".")[-1] == "vtu"]
 
     @property
     def last_interation(self):
+        """number of iterations"""
         return max([int(f[-8:-4]) for f in self.vtu_files])
 
     @property
     def phase_interface(self):
+        """List of phase boundary coordinates."""
         header = ["iteration", "BC", "NodeIdx", "x", "y", "z", "T"]
         df = pd.read_table(
             f"{self.sim_dir}/results/phase-if.dat",
@@ -227,6 +236,7 @@ class Simulation:
 
     @property
     def mesh_files(self):
+        """List of Elmer mesh files."""
         files = []
         for f in os.listdir(self.sim_dir):
             e = f.split(".")[-1]
@@ -236,12 +246,15 @@ class Simulation:
 
     @property
     def last_heater_current(self):
+        """Heater current in last iteration."""
         I_base = self.sim_config["heating_induction"]["current"]
         pwr_scaling = self.probe_data["res heater power scaling"]
         return I_base * pwr_scaling ** 0.5
 
 
 class SteadyStateSim(Simulation):
+    """In this class functionality for steady state simulations is
+    collected."""
     def __init__(
         self,
         geo,
@@ -257,6 +270,27 @@ class SteadyStateSim(Simulation):
         metadata="",
         **_,
     ):
+        """Create a steady-state simulation.
+
+        Args:
+            geo (function): function for geometry generation
+            geo_config (dict): configuration for geo
+            sim (function): function for simulation setup
+            sim_config (dict): configuration for sim
+            mat_config (dict): material configuration
+            config_update (dict, optional): changes for geo_config,
+                sim_config, mat_config. Defaults to {}.
+            sim_name (str, optional): simulation name.
+                Defaults to "opencgs-simulation".
+            base_dir (str, optional): path of base directory. Defaults
+                to "./simdata".
+            visualize (bool, optional): run GUI (of mesh generator).
+                Defaults to False.
+            with_date (bool, optional): Include date in simulation
+                directory name. Defaults to True.
+            metadata (str, optional): Metadata to be saved, e.g git-hash
+                of parent repository. Defaults to "".
+        """
         super().__init__(
             geo,
             geo_config,
@@ -276,6 +310,7 @@ class SteadyStateSim(Simulation):
         self._create_setup(visualize)
 
     def post(self):
+        """Run post-processing."""
         super().post()
         print("evaluating heat fluxes")
         try:
@@ -286,6 +321,8 @@ class SteadyStateSim(Simulation):
 
     @property
     def T_tp(self):
+        """Temperature at triple-point. In case of an error 0.0 is
+        returned."""
         try:
             with open(f"{self.res_dir}/probes.yml", "r") as f:
                 res = yaml.safe_load(f)
@@ -468,6 +505,7 @@ class TransientSubSim(Simulation):
 
 
 class ParameterStudy(Simulation):
+    """In this class functionality for parameter studies is collected."""
     def __init__(
         self,
         SimulationClass,
@@ -485,6 +523,35 @@ class ParameterStudy(Simulation):
         metadata="",
         **kwargs,
     ):
+        """Create a parameter study.
+
+        Args:
+            SimulationClass (Simulation): class of simulations that is
+                investigated in parameter study.
+            geo (function): function for geometry generation
+            geo_config (dict): configuration for geo
+            sim (function): function for simulation setup
+            sim_config (dict): configuration for sim
+            mat_config (dict): material configuration
+            study_params (dict): list of parameter updates for parameter
+                study.
+            config_update (dict, optional): changes for geo_config,
+                sim_config, mat_config. Defaults to {}.
+            create_permutations (bool, optional): If True: create
+                permutations of all given parameters. If False: other
+                parameters will be left at the default. Defaults to
+                False.
+            sim_name (str, optional): simulation name.
+                Defaults to "opencgs-simulation".
+            base_dir (str, optional): path of base directory. Defaults
+                to "./simdata".
+            visualize (bool, optional): run GUI (of mesh generator).
+                Defaults to False.
+            with_date (bool, optional): Include date in simulation
+                directory name. Defaults to True.
+            metadata (str, optional): Metadata to be saved, e.g git-hash
+                of parent repository. Defaults to "".
+        """
         if SimulationClass == SteadyStateSim:
             type_str = "ps"
         elif SimulationClass == TransientSim:
@@ -514,6 +581,7 @@ class ParameterStudy(Simulation):
         self.create_sims(SimulationClass, study_params, create_permutations, kwargs)
 
     def create_sims(self, SimulationClass, study_params, create_permutations, kwargs):
+        """Create simulations for parameter study"""
         keys, vals = self._create_param_lists(study_params)
         print("updating the following parameters:", keys, vals)
         if create_permutations:
@@ -561,6 +629,8 @@ class ParameterStudy(Simulation):
         return keys, vals
 
     def execute(self):
+        """Execute parameter study in parallel. Linux (cluster): on all
+        CUPs, Windows (Laptop) on n-1 CPUs."""
         count = multiprocessing.cpu_count()
         # TODO not sure if that's a good idea...
         if platform.system() == "Windows":
@@ -575,6 +645,7 @@ class ParameterStudy(Simulation):
         simulation.execute()
 
     def post(self):
+        """Run post-processing."""
         for sim in self.sims:
             for f in os.listdir(sim.res_dir):
                 ext = f.split(".")[-1]
@@ -587,6 +658,8 @@ class ParameterStudy(Simulation):
 
 
 class DiameterIteration(Simulation):
+    """In this class functionality for simulations with iterative
+    crystal diameter computation is collected."""
     def __init__(
         self,
         geo,
@@ -606,6 +679,37 @@ class DiameterIteration(Simulation):
         metadata="",
         **_,
     ):
+        """Run a simulation with iterative crystal diameter computation,
+        consisting of multiple steady-state simulations.
+
+        Args:
+            geo (function): function for geometry generation
+            geo_config (dict): configuration for geo
+            sim (function): function for simulation setup
+            sim_config (dict): configuration for sim
+            mat_config (dict): material configuration
+            config_update (dict, optional): changes for geo_config,
+                sim_config, mat_config. Defaults to {}.
+            T_tp (float, optional): Triple point temperature. Defaults
+                to 505 (tin).
+            r_min (float, optional): Minimum allowable crystal radius.
+                Defaults to 0.001.
+            r_max (float, optional): Maximum allowable crystal radius.
+                Defaults to 0.02.
+            max_iterations (int, optional): Maximum number of
+               iterations. Defaults to 10.
+            dT_max (float, optional): Convergence criterion: maximum
+                allowable difference in triple point temperature.
+                Defaults to 0.01.
+            sim_name (str, optional): simulation name.
+                Defaults to "opencgs-simulation".
+            base_dir (str, optional): path of base directory. Defaults
+                to "./simdata".
+            with_date (bool, optional): Include date in simulation
+                directory name. Defaults to True.
+            metadata (str, optional): Metadata to be saved, e.g git-hash
+                of parent repository. Defaults to "".
+        """
         super().__init__(
             geo,
             geo_config,
@@ -644,6 +748,8 @@ class DiameterIteration(Simulation):
         self.dT_max = dT_max
 
     def execute(self):
+        """Run iterative diameter computation process, consisting of
+        multiple steady-state simulations."""
         # initial simulations
         geo_config = deepcopy(self.geo_config)
         geo_config["crystal"]["r"] = self.r_min
@@ -732,6 +838,11 @@ class DiameterIteration(Simulation):
         self.plot(Ttp_r)
 
     def plot(self, Ttp_r):
+        """Plot convergence
+
+        Args:
+            Ttp_r (dict): Temperature @TP: crystal radius
+        """
         fig, ax = plt.subplots(1, 2, figsize=(5.75, 3))
         ax[0].plot(list(Ttp_r.keys()), "x-")
         ax[0].set_xlabel("simulation")
@@ -749,6 +860,12 @@ class DiameterIteration(Simulation):
         plt.close(fig)
 
     def compute_new_r(self, Ttp_r):
+        """Compute new crystal radius for next iteration.
+
+        Args:
+            Ttp_r (dict): Temperature @TP: crystal radius
+                (from previous iterations)
+        """
         T_tps = np.fromiter(Ttp_r.keys(), float)
         rs = np.fromiter(Ttp_r.values(), float)
         # ignore failed simulations (if possible)
@@ -798,5 +915,7 @@ class DiameterIteration(Simulation):
         return r_new
 
     def export_Ttp_r(self, Ttp_r):
+        """Write dictionary with triple point temperature and radius to
+        file."""
         with open(f"{self.res_dir}/Ttp_r.yml", "w") as f:
             yaml.dump(Ttp_r, f, sort_keys=False)

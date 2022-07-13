@@ -3,7 +3,6 @@ import opencgs.elements
 import opencgs.geo
 import opencgs.geo.czochralski
 import opencgs.geo.general
-import opencgs.parameter_study
 import opencgs.post
 import opencgs.setup
 import opencgs.sim

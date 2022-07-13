@@ -10,7 +10,8 @@ from opencgs.elements import Triangle1st, Triangle2nd, Node, Line1st, Line2nd
 
 
 @dataclass
-class HeatfluxSurf:  # surface with heat flux
+class HeatfluxSurf:
+    """Dataclass for definition of surfaces for heat flux evaluation."""
     ID: int
     BodyIDs: list
     lmbd: float
@@ -18,6 +19,7 @@ class HeatfluxSurf:  # surface with heat flux
 
 @dataclass
 class Simulation:
+    """Dataclass for evaluation of parameter studies."""
     dir: str
     name: str
     val: float
@@ -34,6 +36,19 @@ class Simulation:
 
 
 def heat_flux(sim_dir, res_dir, plot=False, save=True, normal_proj=True):
+    """Evaluate heat flux over boundaries from temperature field.
+
+    Args:
+        sim_dir (str): simulation directory
+        res_dir (str): results directory (for output)
+        plot (bool, optional): Show plots. Defaults to False.
+        save (bool, optional): Save plots to file. Defaults to True.
+        normal_proj (bool, optional): Project heat fluxes on the normal
+            of the respective boundary. Defaults to True.
+
+    Returns:
+        tuple: figure, axis, dictionary with heat fluxes.
+    """
     # import data
     files = os.listdir(sim_dir)
     vtu = []
@@ -284,6 +299,7 @@ def heat_flux(sim_dir, res_dir, plot=False, save=True, normal_proj=True):
 
 
 def parameter_study(sim_dir, plot_dir):
+    """Create overview plots of parameter study."""
     # scan directory
     simulation_dirs = os.listdir(sim_dir)
     param_sweeps = {}
@@ -295,6 +311,7 @@ def parameter_study(sim_dir, plot_dir):
             param_sweeps.update({param: {value: simulation}})
         else:
             param_sweeps[param].update({value: simulation})
+    # plot
     for param, sim_dict in param_sweeps.items():
         if len(param_sweeps) == 1:
             plot_dir_ = plot_dir
@@ -329,10 +346,3 @@ def parameter_study(sim_dir, plot_dir):
             fig.tight_layout()
             fig.savefig(f"{plot_dir_}/hf_{hf}.png")
             plt.close(fig)
-
-
-if __name__ == "__main__":
-    # for debug purposes
-    base_dir = "./simdata/xxx"
-    sim_dir = base_dir + "/02_simulation"
-    parameter_study(base_dir + "/02_simulation", base_dir + "/04_plots")

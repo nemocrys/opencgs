@@ -11,16 +11,18 @@ SOLVER_FILE = os.path.dirname(os.path.realpath(__file__)) + "/data/solvers.yml"
 MATERIAL_FILE = os.path.dirname(os.path.realpath(__file__)) + "/data/materials.yml"
 
 
+
+# TODO remove transient
 class ElmerSetupCz:
     def __init__(
         self,
         heat_control,
         heat_convection,
         phase_change,
-        transient,  # TODO make this optional
         heating,
         sim_dir,
         v_pull=0,
+        transient=False,  # TODO make this optional
         heating_induction=False,
         heating_resistance=False,
         smart_heater={},
@@ -29,6 +31,33 @@ class ElmerSetupCz:
         solver_update={},
         materials_dict={},
     ):
+        """Setup for Czochralski growth simulation with Elmer
+
+        Args:
+            heat_control (bool): modify heating to get the melting point
+                temperature at the triple point.
+            heat_convection (bool): include a heat convection model with
+                heat transfer coefficients
+            phase_change (bool): include latent heat release
+            heating (dict): configuration of respective heating 
+            sim_dir (str): simulation directory file path
+            v_pull (int, optional): pulling velocity. Defaults to 0.
+            transient (bool, optional): transient simulation. Defaults
+                to False.
+            heating_resistance (bool, optional): furnace with resistance
+                heating. Defaults to False (= inductive heating ).
+            smart_heater (dict, optional): heater control parameters.
+                Defaults to {}.
+            probes (dict, optional): probe locations where temperatures
+                etc. are evaluated. Defaults to {}.
+            transient_setup (dict, optional): configuration for
+                transient simulation. Defaults to {}.
+            solver_update (dict, optional): modified solver parameters.
+                Defaults to {}.
+            materials_dict (dict, optional): material properties.
+                Defaults to {}.
+        """
+
         self.heat_control = heat_control
         self.heat_convection = heat_convection
         self.phase_change = phase_change
@@ -170,10 +199,12 @@ class ElmerSetupCz:
 
     @property
     def joule_heat(self):
+        """Joule heat body force."""
         return self._joule_heat
 
     @property
     def movement(self):
+        """Boundary condition for moving boundaries (trans. sim.)."""
         if self.transient:
             return [0, f'Variable Time\n    real MATC "{self.v_pull / 6e4 }*tx"']
         else:
@@ -181,17 +212,39 @@ class ElmerSetupCz:
 
     @property
     def distortion(self):
+        """Boundary condition for distorted boundaries (trans. sim.)."""
         return [0, None]
 
     def add_crystal(self, shape, material="", force=None):
+        """Add the crystal to the simulation.
+
+        Args:
+            shape (Shape): objectgmsh shape object.
+            material (str, optional): material name. Defaults to "".
+            force (elmer.BodyForce, optional): body force, e.g. joule
+                heat. Defaults to None.
+        """
         self._crystal = self.add_body(shape, material, force)
 
     def add_inductor(self, shape, material=""):
+        """Add the inductor to the simulation (inductive heating).
+
+        Args:
+            shape (int): ID of the body
+            material (str, optional): material name. Defaults to "".
+        """
         self._current = elmer.BodyForce(self.sim, "Current Density")
         self._current.current_density = self.heating["current"] / shape.params.area
         self._inductor = self.add_body(shape, material, self._current)
 
     def add_resistance_heater(self, shape, material=""):
+        """Add the resistance heater to the simulation. A constant
+        heating power will be set in the volume.
+
+        Args:
+            shape (Shape): objectgmsh shape object.
+            material (str, optional): material name. Defaults to "".
+        """
         self._resistance_heating = elmer.BodyForce(self.sim, "resistance_heating")
         self._resistance_heating.heat_source = 1  # TODO set proper power_per_kilo?
         self._resistance_heating.integral_heat_source = self.heating["power"]
@@ -207,6 +260,17 @@ class ElmerSetupCz:
         self._heater = self.add_body(shape, material, self._resistance_heating)
 
     def add_body(self, shape, material="", force=None):
+        """Add a body to the simulation.
+
+        Args:
+            shape (Shape): objectgmsh shape object.
+            material (str, optional): material name. Defaults to "".
+            force (BodyForce, optional): Body force, e.g., joule heat.
+                Defaults to None.
+
+        Returns:
+            Body: pyelmer Body object.
+        """
         body = elmer.Body(self.sim, shape.name, [shape.ph_id])
         if material == "":
             material = self.add_material(shape.params.material)
@@ -222,6 +286,24 @@ class ElmerSetupCz:
     def add_radiation_boundary(
         self, shape, movement=[0, 0], htc=0, T_ext=293.15, rad_s2s=True
     ):
+        """Add a boundary with Robin-BC for radiation and convective
+        cooling.
+
+        Args:
+            shape (Shape): objectgmsh shape object.
+            movement (list, optional): Movement of the boundary.
+                Defaults to [0, 0].
+            htc (float, optional): Heat transfer coefficient. Defaults
+                to 0.
+            T_ext (float, optional): External temperature for convective
+                cooling model and radiation to ambient. Defaults to
+                293.15.
+            rad_s2s (bool, optional): use surface-to-surface radiation
+                modeling. Defaults to True.
+
+        Returns:
+            Boundary: pyelmer Boundary object.
+        """
         boundary = elmer.Boundary(self.sim, shape.name, [shape.ph_id])
         if rad_s2s:
             boundary.radiation = True
@@ -236,6 +318,17 @@ class ElmerSetupCz:
         return boundary
 
     def add_temperature_boundary(self, shape, T, movement=[0, 0]):
+        """Add a boundary with Dirichlet-BC for fixed temperature.
+
+        Args:
+            shape (Shape): objectgmsh shape object.
+            T (float): boundary temperature.
+            movement (list, optional): Movement of the boundary.
+                Defaults to [0, 0].
+
+        Returns:
+            Boundary: pyelmer Boundary object.
+        """
         boundary = elmer.Boundary(self.sim, shape.name, [shape.ph_id])
         boundary.fixed_temperature = T
         if self.mesh_update:
@@ -243,6 +336,17 @@ class ElmerSetupCz:
         return boundary
 
     def add_heatflux_boundary(self, shape, heatflux, movement=[0, 0]):
+        """Add a boundary with Neumann-BC for fixed heat flux.
+
+        Args:
+            shape (Shape): objectgmsh shape object.
+            heatflux (float): boundary heat flux.
+            movement (list, optional): Movement of the boundary.
+                Defaults to [0, 0].
+
+        Returns:
+            Boundary: pyelmer Boundary object.
+        """
         boundary = elmer.Boundary(self.sim, shape.name, [shape.ph_id])
         boundary.fixed_heatflux = heatflux
         if self.mesh_update:
@@ -250,6 +354,16 @@ class ElmerSetupCz:
         return boundary
 
     def add_material(self, name, setup_file=""):
+        """Add material to the simulation.
+
+        Args:
+            name (str): name of the material
+            setup_file (str, optional): path to yml-file with material
+                parameters. Defaults to "".
+
+        Returns:
+            Material: pyelmer Material object.
+        """
         if name in self.sim.materials:
             return self.sim.materials[name]
         if name in self.materials_dict:
@@ -266,7 +380,12 @@ class ElmerSetupCz:
             material.data.pop("Surface Tension")
         return material
 
-    def add_phase_interface(self, shape, crystal):
+    def add_phase_interface(self, shape):
+        """Add crystallization front to the simulation
+
+        Args:
+            shape (Shape): objectgmsh shape object.
+        """
         if not self.phase_change:
             raise ValueError("This Simulation does not include a phase change model.")
         if self._eqn_phase_change is None:
@@ -285,7 +404,7 @@ class ElmerSetupCz:
         # Boundary condition
         bc_phase_if = elmer.Boundary(self.sim, shape.name, [shape.ph_id])
         bc_phase_if.save_line = True
-        bc_phase_if.normal_target_body = self.sim.bodies[crystal.name]
+        bc_phase_if.normal_target_body = self.sim.bodies[self._crystal.name]
         if self.heat_control and not self.smart_heater["control-point"]:
             bc_phase_if.smart_heater = True
             bc_phase_if.smart_heater_T = self.smart_heater["T"]
@@ -300,11 +419,19 @@ class ElmerSetupCz:
             bc_phase_if.phase_change_body = phase_if
 
     def add_interface(self, shape, movement=[0, 0]):
+        """Add a interface between to bodies to the simulation
+
+        Args:
+            shape (Shape): objectgmsh shape object.
+            movement (list, optional): Movement of the interface.
+                Defaults to [0, 0].
+        """
         boundary = elmer.Boundary(self.sim, shape.name, [shape.ph_id])
         if self.mesh_update:
             boundary.mesh_update = movement
 
     def export(self):
+        """Create simulation setup and write Elmer sif file."""
         if "global" in self.solver_update:
             self.sim.settings.update(self.solver_update["global"])
         if "all-solvers" in self.solver_update:
@@ -331,6 +458,12 @@ class ElmerSetupCz:
             yaml.dump(self.probes, f, sort_keys=False)
 
     def heat_flux_computation(self, body, boundary):
+        """Define a body and boundary for evaluation of heat fluxes.
+
+        Args:
+            body (Body): pyelmer Body object
+            boundary (Boundary): pyelmer Boundary object
+        """
         # TODO that's a way too complicated!
         hfs = HeatfluxSurf(
             boundary.geo_ids[0],
