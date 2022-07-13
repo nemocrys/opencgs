@@ -1,14 +1,19 @@
 # opencgs
 
-Validated open source crystal growth simulation.
+Open source crystal growth simulation.
 
+The project is developed and maintained by the [**Model experiments group**](https://www.ikz-berlin.de/en/research/materials-science/section-fundamental-description#c486) at the Leibniz Institute for Crystal Growth (IKZ).
+
+### Referencing
+If you use this code in your research, please cite our article (available with open access):
+
+> A. Enders-Seidlitz, J. Pal, and K. Dadzis, Development and validation of a thermal simulation for the Czochralski crystal growth process using model experiments *Journal of Crystal Growth*, In Press. [https://doi.org/10.1016/j.jcrysgro.2022.126750](https://doi.org/10.1016/j.jcrysgro.2022.126750).
+> 
 ## Overview
 
 This package provides an interface to set up crystal growth simulations using open source software. Currently, the focus is set on Czochralski growth (and some of the functionality is tailored to it). Nevertheless, opencgs may also be useful for other applications. opencgs is validated within the [NEMOCRYS project](https://www.researchgate.net/project/NEMOCRYS-Next-Generation-Multiphysical-Models-for-Crystal-Growth-Processes) using model experiments.
 
 Currently, the focus of opencgs is on 2D axisymmetric thermal simulation (including inductive heating) using the software Elmer. Further extension, e.g., for 3D domains or thermal stresses computation is planned.
-
-A paper showing the capability of opencgs for Czochralski growth simulation has been submitted.
 
 ## Usage
 
@@ -53,7 +58,7 @@ In case of questions just open an issue or contact Arved Enders-Seidlitz.
 
 [This project](https://www.researchgate.net/project/NEMOCRYS-Next-Generation-Multiphysical-Models-for-Crystal-Growth-Processes) has received funding from the European Research Council (ERC) under the European Union's Horizon 2020 research and innovation programme (grant agreement No 851768).
 
-<img src="https://raw.githubusercontent.com/nemocrys/opencgs/master/EU-ERC.png">
+<img src="https://github.com/nemocrys/test-cz-induction/blob/main/EU-ERC.png">
 
 ## Contribution
 
