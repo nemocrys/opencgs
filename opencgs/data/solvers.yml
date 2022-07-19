@@ -48,6 +48,7 @@ MagnetoDynamicsCalcFields:
   Calculate Magnetic Field Strength: True
   Calculate Electric Field: True
   Calculate Current Density: True
+  Calculate JxB: Logical True  
   Exec Solver: Always
   Calculate Nodal Fields: Logical False
   Calculate Elemental Fields: Logical True
@@ -81,15 +82,15 @@ ResultOutputSolver:
   Procedure: '"ResultOutputSolve" "ResultOutputSolver"'
   VTU Format: True
   Save Geometry Ids: 'Logical True'
-  Scalar Field 1: '"Temperature"'
-  Scalar Field 2: '"Heat Conductivity"'
-  Scalar Field 3: '"Temperature Loads"'
-  Scalar Field 4: '"Potential"'
-  Scalar Field 5: '"Joule Heating"'
-  Scalar Field 6: '"Magnetic Flux Density"'
-  Scalar Field 7: '"Phase Surface"'
-  Scalar Field 8: '"Mesh Update"'
-  Scalar Field 9: '"Mesh Velocity"'
+  # Scalar Field 1: '"Temperature"'
+  # Scalar Field 2: '"Heat Conductivity"'
+  # Scalar Field 3: '"Temperature Loads"'
+  # Scalar Field 4: '"Potential"'
+  # Scalar Field 5: '"Joule Heating"'
+  # Scalar Field 6: '"Magnetic Flux Density"'
+  # Scalar Field 7: '"Phase Surface"'
+  # Scalar Field 8: '"Mesh Update"'
+  # Scalar Field 9: '"Mesh Velocity"'
 SaveLine:
   Exec Solver: 'after all'
   Equation: '"SaveLine"'

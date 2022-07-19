@@ -97,10 +97,29 @@ class ElmerSetupCz:
         # solvers
         if self.heating_induction:
             omega = 2 * np.pi * self.heating["frequency"]
-            self.solver_statmag = elmer.load_solver(
-                "StatMagSolver", self.sim, SOLVER_FILE
-            )
-            self.solver_statmag.data.update({"Angular Frequency": omega})
+            self.use_mgdyn = False
+            if "solver" in self.heating:
+                if self.heating["solver"] == "mgdyn":
+                    self.use_mgdyn = True
+                elif self.heating["solver"] == "statmag":
+                    self.use_mgdyn = False
+                else:
+                    raise ValueError("Unknown solver in dict with heating configuration.")
+            if self.use_mgdyn:
+                self.solver_mgdyn = elmer.load_solver(
+                    "MagnetoDynamics2DHarmonic", self.sim, SOLVER_FILE
+                )
+                self.solver_calcfields = elmer.load_solver(
+                    "MagnetoDynamicsCalcFields", self.sim, SOLVER_FILE
+                )
+                self.solver_mgdyn.data.update({"Angular Frequency": omega})
+                self.solver_calcfields.data.update({"Angular Frequency": omega})
+            else:
+                self.solver_statmag = elmer.load_solver(
+                    "StatMagSolver", self.sim, SOLVER_FILE
+                )
+                self.solver_statmag.data.update({"Angular Frequency": omega})
+
         self.solver_heat = elmer.load_solver("HeatSolver", self.sim, SOLVER_FILE)
         if self.phase_change:
             self.solver_phase_change = elmer.load_solver(
@@ -127,9 +146,14 @@ class ElmerSetupCz:
 
         # equations
         if self.heating_induction:
-            equation_main = elmer.Equation(
-                self.sim, "equation_main", [self.solver_statmag, self.solver_heat]
-            )
+            if self.use_mgdyn:
+                equation_main = elmer.Equation(
+                    self.sim, "equation_main", [self.solver_mgdyn, self.solver_calcfields, self.solver_heat]
+                )
+            else:
+                equation_main = elmer.Equation(
+                    self.sim, "equation_main", [self.solver_statmag, self.solver_heat]
+                )
         else:
             equation_main = elmer.Equation(
                 self.sim, "main_equation", [self.solver_heat]
@@ -402,13 +426,23 @@ class ElmerSetupCz:
         if "all-solvers" in self.solver_update:
             self.solver_heat.data.update(self.solver_update["all-solvers"])
             if self.heating_induction:
-                self.solver_statmag.data.update(self.solver_update["all-solvers"])
+                if self.use_mgdyn:
+                    self.solver_mgdyn.data.update(self.solver_update["all-solvers"])
+                    self.solver_calcfields.data.update(self.solver_update["all-solvers"])
+                else:
+                    self.solver_statmag.data.update(self.solver_update["all-solvers"])
             if self.phase_change:
                 self.solver_phase_change.data.update(self.solver_update["all-solvers"])
         if "solver-heat" in self.solver_update:
             self.solver_heat.data.update(self.solver_update["solver-heat"])
-        if "solver-statmag" in self.solver_update:
-            self.solver_statmag.data.update(self.solver_update["solver-statmag"])
+        if self.use_mgdyn:
+            if "solver-mgdyn" in self.solver_update:
+                self.solver_mgdyn.data.update(self.solver_update["solver-mgdyn"])
+            if "solver-calcfields" in self.solver_update:
+                self.solver_calcfields.data.update(self.solver_update["solver-calcfields"])
+        else:
+            if "solver-statmag" in self.solver_update:
+                self.solver_statmag.data.update(self.solver_update["solver-statmag"])
         if "solver-phase-change" in self.solver_update:
             self.solver_phase_change.data.update(
                 self.solver_update["solver-phase-change"]

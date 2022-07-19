@@ -21,7 +21,7 @@ from pyelmer.post import scan_logfile
 
 
 # for documentation of applied versions
-PACKAGES = ["gmsh", "matplotlib", "numpy", "pandas", "pyelmer"]
+PACKAGES = ["gmsh", "matplotlib", "numpy", "pandas", "pyelmer", "objectgmsh", "opencgs"]
 
 
 class Simulation:

@@ -16,7 +16,7 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/nemocrys/opencgs",
-    packages=["opencgs", "opencgs.geo", "opencgs.test"],
+    packages=["opencgs", "opencgs.test"],
     include_package_data=True,
     package_data={"": ["data/*.yml"]},
     classifiers=[
