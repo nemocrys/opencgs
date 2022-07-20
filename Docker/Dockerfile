@@ -72,7 +72,7 @@ RUN apt-get -y install \
         pandas==1.2.*\
         pyyaml==5.4.*\
         pyelmer==0.3.*\
-        objectgmsh==0.*
+        objectgmsh==0.9
 
 # Install gmsh & dependencies
 # istructions found here: https://fenicsproject.discourse.group/t/problem-with-installation-of-latest-gmsh-4-6-0-via-pip/4078/2
