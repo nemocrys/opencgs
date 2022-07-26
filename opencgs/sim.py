@@ -188,7 +188,7 @@ class Simulation:
         # post_processing(sim_path)
         err, warn, stats = scan_logfile(self.sim_dir)
         if err != []:
-            raise OpencgsError(f"The simulation was not successful.\nThe following errors were found in the log:\n{err}")
+            raise OpencgsError(f"The simulation {self.sim_name} was not successful.\nThe following errors were found in the log: {err}")
         else:
             print(err, warn, stats)
             print("Finished simulation ", self.root_dir, " .")
