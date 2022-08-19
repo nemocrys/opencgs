@@ -24,6 +24,10 @@ from pyelmer.post import scan_logfile
 PACKAGES = ["gmsh", "matplotlib", "numpy", "pandas", "pyelmer", "objectgmsh", "opencgs"]
 
 
+class OpencgsError(Exception):
+    pass
+
+
 class Simulation:
     """In this class base functionality for all different kinds of simulations is collected."""
     def __init__(
@@ -183,12 +187,15 @@ class Simulation:
         run_elmer_solver(self.sim_dir)
         # post_processing(sim_path)
         err, warn, stats = scan_logfile(self.sim_dir)
-        print(err, warn, stats)
-        print("Finished simulation ", self.root_dir, " .")
-        print("Post processing...")
-        self._postprocessing_probes()
-        self.post()
-        print("Finished post processing.")
+        if err != []:
+            raise OpencgsError(f"The simulation {self.sim_name} was not successful.\nThe following errors were found in the log: {err}")
+        else:
+            print(err, warn, stats)
+            print("Finished simulation ", self.root_dir, " .")
+            print("Post processing...")
+            self._postprocessing_probes()
+            self.post()
+            print("Finished post processing.")
 
     def post(self):
         """Run the post-processing."""
