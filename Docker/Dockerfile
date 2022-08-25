@@ -16,8 +16,31 @@
 FROM ubuntu:20.04
 
 # Labels
-LABEL maintainer="Arved Enders-Seidlitz <arved.enders-seidlitz@ikz-berlin.de>"
+LABEL maintainer="Arved Wintzer <arved.wintzer@ikz-berlin.de>"
 LABEL description="opencgs computation environment"
+
+ARG ELMER_COMMIT=c77a375945ebf1af224a8edddcdb99314a55b16f
+ARG GMSH_VERSION=4.10.5
+
+ARG BUILD_ESSENTIAL_VERSION=12.8*
+ARG CMAKE_VERSION=3.16.*
+ARG GIT_VERSION=1:2.25.*
+ARG LIBBLAS_DEV_VERSION=3.9.*
+ARG LIBLAPPACK_DEV_VERSION=3.9.*
+ARG LIBMUMPS_DEV_VERSION=5.2.*
+ARG LIBPARMETIS_DEV_VERSION=4.0.*
+ARG MPICH_VERSION=3.3.*
+
+ARG PYTHON_VERSION=3.8.*
+ARG PYTHON_PIP_VERSION=20.0.*
+ARG MESHIO_VERSION=5.3.*
+ARG NUMPY_VERSION=1.23.*
+ARG MATPLOTLIB_VERSION=3.5.*
+ARG SCIPY_VERSION=1.9.*
+ARG PANDAS_VERSION=1.4.*
+ARG PYYAML_VERSION=6.0.*
+ARG PYELMER_VERSION=1.0.*
+ARG OBJECTGMSH_VERSION=0.9
 
 # deactivate interations -> no question for geolocation
 ENV DEBIAN_FRONTEND=noninteractive 
@@ -29,19 +52,23 @@ WORKDIR /home
 # check available versions with 'apt-cache madison <package>'
 RUN apt-get update && \
     apt-get -y install \
-    build-essential=12.8* \
-    cmake=3.16.* \
-    git=1:2.25.* \
-    libblas-dev=3.9.*\
-	liblapack-dev=3.9.*\
-	libmumps-dev=5.2.*\
-	libparmetis-dev=4.0.*
-	# mpich=3.3.*  # install this package if you want to use mpi
+    build-essential=${BUILD_ESSENTIAL_VERSION} \
+    cmake=${CMAKE_VERSION} \
+    git=${GIT_VERSION} \
+    libblas-dev=${LIBBLAS_DEV_VERSION}\
+	liblapack-dev=${LIBLAPPACK_DEV_VERSION}\
+	libmumps-dev=${LIBMUMPS_DEV_VERSION}\
+	libparmetis-dev=${LIBPARMETIS_DEV_VERSION}\
+	mpich=${MPICH_VERSION}
 
 # Clone the Elmer source code and compile
+
 RUN mkdir elmer && \
     cd elmer && \
-    git clone -b release-9.0 https://github.com/ElmerCSC/elmerfem.git && \
+    git clone https://github.com/ElmerCSC/elmerfem.git && \
+    cd elmerfem && \
+    git checkout ${ELMER_COMMIT} && \
+    cd .. && \
     mkdir build && \
     mkdir install && \
   	cd build && \
@@ -49,7 +76,7 @@ RUN mkdir elmer && \
         -DCMAKE_INSTALL_PREFIX=../install \
         -DCMAKE_C_COMPILER=/usr/bin/gcc \
         -DCMAKE_Fortran_COMPILER=/usr/bin/gfortran \
-        -DWITH_MPI:BOOL=FALSE \
+        -DWITH_MPI:BOOL=TRUE \
         -DWITH_Mumps:BOOL=TRUE \
         -DWITH_Hypre:BOOL=FALSE \
         -DWITH_Trilinos:BOOL=FALSE \
@@ -61,23 +88,24 @@ RUN mkdir elmer && \
 ENV PATH=$PATH:/home/elmer/install/bin
 
 # Install python and required packages
-RUN apt-get -y install \
-    python3=3.8.* \
-    python3-pip=20.0.* &&\
+RUN apt-get update && \
+    apt-get -y install \
+    python3=${PYTHON_VERSION} \
+    python3-pip=${PYTHON_PIP_VERSION} &&\
     pip3 install \
-        meshio==4.4.*\
-        numpy==1.20.*\
-        matplotlib==3.4.*\
-        scipy==1.6.*\
-        pandas==1.2.*\
-        pyyaml==5.4.*\
-        pyelmer==0.3.*\
-        objectgmsh==0.9
+        meshio==${MESHIO_VERSION} \
+        numpy==${NUMPY_VERSION} \
+        matplotlib==${MATPLOTLIB_VERSION} \
+        scipy==${SCIPY_VERSION} \
+        pandas==${PANDAS_VERSION} \
+        pyyaml==${PYYAML_VERSION} \
+        pyelmer==${PYELMER_VERSION} \
+        objectgmsh==${OBJECTGMSH_VERSION}
 
 # Install gmsh & dependencies
 # istructions found here: https://fenicsproject.discourse.group/t/problem-with-installation-of-latest-gmsh-4-6-0-via-pip/4078/2
-ARG GMSH_VERSION=4.8.4
-RUN apt-get install -y \
+RUN apt-get update && \
+    apt-get install -y \
         wget \
         libglu1 \
         libxrender1  \
@@ -93,25 +121,22 @@ ENV PATH=/home/gmsh-${GMSH_VERSION}-Linux64-sdk/bin:$PATH
 # Install opencgs from this repository
 COPY  . /home/opencgs
 RUN cd /home/opencgs &&\
-    pip3 install -e .
+    pip3 install .
 
 # Install additional utilities
-RUN apt-get install -y mc && \
+RUN apt-get update && \
+    apt-get install -y mc && \
     mkdir scripts && \
     cd scripts && \
     echo "source /usr/lib/mc/mc-wrapper.sh" >> mc && \
     chmod +x mc
+# ENV PATH=/home/scripts:$PATH
 
-ENV PATH=/home/scripts:$PATH
 RUN mkdir /home/workdir
-
-# # create user
-# RUN adduser --disabled-password --gecos '' user
-# USER user
-
 WORKDIR /home/workdir
 
 # modify user id and group
 # see https://techflare.blog/permission-problems-in-bind-mount-in-docker-volume/
-RUN apt-get -y install gosu 
+RUN apt-get update && \
+    apt-get -y install gosu 
 ENTRYPOINT [ "/home/opencgs/Docker/entrypoint.sh" ]
