@@ -76,6 +76,7 @@ RUN mkdir elmer && \
         -DCMAKE_INSTALL_PREFIX=../install \
         -DCMAKE_C_COMPILER=/usr/bin/gcc \
         -DCMAKE_Fortran_COMPILER=/usr/bin/gfortran \
+        -DWITH_LUA=TRUE\
         -DWITH_MPI:BOOL=TRUE \
         -DWITH_Mumps:BOOL=TRUE \
         -DWITH_Hypre:BOOL=FALSE \
