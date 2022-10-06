@@ -95,9 +95,9 @@ class ElmerSetupCz:
 
     def _set_equations(self):
         # solvers
+        self.use_mgdyn = False
         if self.heating_induction:
             omega = 2 * np.pi * self.heating["frequency"]
-            self.use_mgdyn = False
             if "solver" in self.heating:
                 if self.heating["solver"] == "mgdyn":
                     self.use_mgdyn = True
