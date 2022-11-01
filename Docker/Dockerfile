@@ -78,6 +78,7 @@ RUN mkdir elmer && \
         -DCMAKE_Fortran_COMPILER=/usr/bin/gfortran \
         -DWITH_LUA=TRUE\
         -DWITH_MPI:BOOL=TRUE \
+        -DWITH_OpenMP=True\
         -DWITH_Mumps:BOOL=TRUE \
         -DWITH_Hypre:BOOL=FALSE \
         -DWITH_Trilinos:BOOL=FALSE \
