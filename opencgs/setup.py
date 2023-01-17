@@ -38,7 +38,7 @@ class ElmerSetupCz:
             phase_change (bool): include latent heat release
             heating (dict): configuration of respective heating 
             sim_dir (str): simulation directory file path
-            v_pull (int, optional): pulling velocity. Defaults to 0.
+            v_pull (int, optional): pulling velocity in mm/min. Defaults to 0.
             heating_resistance (bool, optional): furnace with resistance
                 heating. Defaults to False (= inductive heating ).
             smart_heater (dict, optional): heater control parameters.
@@ -398,7 +398,10 @@ class ElmerSetupCz:
             bc_phase_if.smart_heater_T = self.smart_heater["T"]
         if self.phase_change:
             bc_phase_if.phase_change_steady = True
-            bc_phase_if.phase_change_vel = self.v_pull / 6e4  # mm/min to m/s
+            if type(self.v_pull) is str:
+                bc_phase_if.phase_change_vel = self.v_pull
+            else:
+                bc_phase_if.phase_change_vel = self.v_pull / 6e4  # mm/min to m/s
             bc_phase_if.material = self._crystal.material
             bc_phase_if.phase_change_body = phase_if
         return phase_if, bc_phase_if
