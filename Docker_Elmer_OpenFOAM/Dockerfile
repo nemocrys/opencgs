@@ -39,8 +39,9 @@ ARG MATPLOTLIB_VERSION=3.5.*
 ARG SCIPY_VERSION=1.9.*
 ARG PANDAS_VERSION=1.4.*
 ARG PYYAML_VERSION=6.0.*
-ARG PYELMER_VERSION=1.0.*
-ARG OBJECTGMSH_VERSION=0.9
+ARG PYELMER_VERSION=1.1.*
+ARG OBJECTGMSH_VERSION=0.*
+ARG NEMOBLOCK_VERSION=1.0.*
 
 # deactivate interations -> no question for geolocation
 ENV DEBIAN_FRONTEND=noninteractive 
@@ -102,7 +103,8 @@ RUN apt-get update && \
         pandas==${PANDAS_VERSION} \
         pyyaml==${PYYAML_VERSION} \
         pyelmer==${PYELMER_VERSION} \
-        objectgmsh==${OBJECTGMSH_VERSION}
+        objectgmsh==${OBJECTGMSH_VERSION} \
+        nemoblock==${NEMOBLOCK_VERSION}
 
 # Install gmsh & dependencies
 # istructions found here: https://fenicsproject.discourse.group/t/problem-with-installation-of-latest-gmsh-4-6-0-via-pip/4078/2
