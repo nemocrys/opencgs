@@ -18,8 +18,8 @@ class ElmerSetupCz:
         heat_control,
         heat_convection,
         phase_change,
-        heating,
         sim_dir,
+        heating={},
         v_pull=0,
         heating_induction=False,
         heating_resistance=False,
@@ -218,7 +218,7 @@ class ElmerSetupCz:
         self._inductor = self.add_body(shape, material, self._current)
         return self._inductor
 
-    def add_resistance_heater(self, shape, material=""):
+    def add_resistance_heater(self, shape, power=-1, material=""):
         """Add the resistance heater to the simulation. A constant
         heating power will be set in the volume.
 
@@ -229,9 +229,12 @@ class ElmerSetupCz:
         Returns:
             Body: pyelmer Body object.
         """
-        self._resistance_heating = elmer.BodyForce(self.sim, "resistance_heating")
+        self._resistance_heating = elmer.BodyForce(self.sim, f"heating_{shape.name}")
         self._resistance_heating.heat_source = 1  # TODO set proper power_per_kilo?
-        self._resistance_heating.integral_heat_source = self.heating["power"]
+        if power == -1:
+            self._resistance_heating.integral_heat_source = self.heating["power"]
+        else:
+            self._resistance_heating.integral_heat_source = power
         if self.heat_control:
             self._resistance_heating.smart_heat_control = True
             if self.smart_heater["control-point"]:
