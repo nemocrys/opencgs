@@ -19,7 +19,7 @@ FROM ubuntu:20.04
 LABEL maintainer="Arved Wintzer <arved.wintzer@ikz-berlin.de>"
 LABEL description="opencgs computation environment"
 
-ARG ELMER_COMMIT=9eda0ed70ab60e8fd9c0aa1ec0da951a25cb9d60
+ARG ELMER_COMMIT=7e41a0147cdead74c6c5744d136e42d4ae5f0ede
 ARG GMSH_VERSION=4.11.1
 
 ARG BUILD_ESSENTIAL_VERSION=12.8*

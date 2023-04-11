@@ -19,7 +19,8 @@ FROM ubuntu:20.04
 LABEL maintainer="Arved Wintzer <arved.wintzer@ikz-berlin.de>"
 LABEL description="opencgs computation environment"
 
-ARG ELMER_COMMIT=9eda0ed70ab60e8fd9c0aa1ec0da951a25cb9d60
+ARG ELMER_COMMIT=7e41a0147cdead74c6c5744d136e42d4ae5f0ede
+ARG ELMER_TO_FOAM_COMMIT=739466ac0c2d107b84b53f7067ccdfd24cd0784d
 ARG GMSH_VERSION=4.10.5
 
 ARG BUILD_ESSENTIAL_VERSION=12.8*
@@ -122,20 +123,6 @@ RUN apt-get update && \
 ENV PYTHONPATH=/home/gmsh-${GMSH_VERSION}-Linux64-sdk/lib:$PYTHONPATH
 ENV PATH=/home/gmsh-${GMSH_VERSION}-Linux64-sdk/bin:$PATH
 
-# Install opencgs from this repository
-COPY  . /home/opencgs
-RUN cd /home/opencgs &&\
-    pip3 install .
-
-# Install additional utilities
-RUN apt-get update && \
-    apt-get install -y mc && \
-    mkdir scripts && \
-    cd scripts && \
-    echo "source /usr/lib/mc/mc-wrapper.sh" >> mc && \
-    chmod +x mc
-# ENV PATH=/home/scripts:$PATH
-
 # setup openFOAM
 RUN apt-get update && \
         apt-get install -y \
@@ -185,8 +172,27 @@ RUN apt-get update && \
     apt-get install -y openfoam2112-default && \
     source /usr/lib/openfoam/openfoam2112/etc/bashrc 
 
-# change to bash shell, else source does not work
-SHELL ["/bin/bash", "-c"]
+RUN cd /home && \
+    git clone https://github.com/nemocrys/elmerToFoamBC && \
+    cd elmerToFoamBC && \
+    git checkout ${ELMER_TO_FOAM_COMMIT} && \
+    source /usr/lib/openfoam/openfoam2112/etc/bashrc && \
+    wmake elmerToFoamBC
+    # /usr/lib/openfoam/openfoam2112/wmake/wmake elmerToFoamBC
+
+# Install opencgs from this repository
+COPY  . /home/opencgs
+RUN cd /home/opencgs &&\
+    pip3 install .
+
+# Install additional utilities
+RUN apt-get update && \
+    apt-get install -y mc && \
+    mkdir scripts && \
+    cd scripts && \
+    echo "source /usr/lib/mc/mc-wrapper.sh" >> mc && \
+    chmod +x mc
+# ENV PATH=/home/scripts:$PATH
 
 
 # setup workingdirectory for mapping
