@@ -19,9 +19,9 @@ FROM ubuntu:20.04
 LABEL maintainer="Arved Wintzer <arved.wintzer@ikz-berlin.de>"
 LABEL description="opencgs computation environment"
 
-ARG ELMER_COMMIT=7e41a0147cdead74c6c5744d136e42d4ae5f0ede
+ARG ELMER_COMMIT=c37d486543bf09fbc6adecb7fcd46f90d945fbd5
 ARG ELMER_TO_FOAM_COMMIT=739466ac0c2d107b84b53f7067ccdfd24cd0784d
-ARG GMSH_VERSION=4.10.5
+ARG GMSH_VERSION=4.11.1
 
 ARG BUILD_ESSENTIAL_VERSION=12.8*
 ARG CMAKE_VERSION=3.16.*
@@ -43,6 +43,7 @@ ARG PYYAML_VERSION=6.0.*
 ARG PYELMER_VERSION=1.1.*
 ARG OBJECTGMSH_VERSION=0.*
 ARG NEMOBLOCK_VERSION=1.0.*
+ARG PYVISTA_VERSION=0.39
 
 # deactivate interations -> no question for geolocation
 ENV DEBIAN_FRONTEND=noninteractive 
@@ -105,7 +106,8 @@ RUN apt-get update && \
         pyyaml==${PYYAML_VERSION} \
         pyelmer==${PYELMER_VERSION} \
         objectgmsh==${OBJECTGMSH_VERSION} \
-        nemoblock==${NEMOBLOCK_VERSION}
+        nemoblock==${NEMOBLOCK_VERSION} \
+        pyvista==${PYVISTA_VERSION}
 
 # Install gmsh & dependencies
 # istructions found here: https://fenicsproject.discourse.group/t/problem-with-installation-of-latest-gmsh-4-6-0-via-pip/4078/2
@@ -166,17 +168,18 @@ RUN wget -q -O - https://dl.openfoam.com/add-debian-repo.sh | bash && \
     apt-get install -y ca-certificates && \
     apt-get update
         
+# change to bash shell, else source does not work
 SHELL ["/bin/bash", "-c"]
 
 RUN apt-get update && \ 
-    apt-get install -y openfoam2112-default && \
-    source /usr/lib/openfoam/openfoam2112/etc/bashrc 
+    apt-get install -y openfoam2212-default && \
+    source /usr/lib/openfoam/openfoam2212/etc/bashrc 
 
 RUN cd /home && \
     git clone https://github.com/nemocrys/elmerToFoamBC && \
     cd elmerToFoamBC && \
     git checkout ${ELMER_TO_FOAM_COMMIT} && \
-    source /usr/lib/openfoam/openfoam2112/etc/bashrc && \
+    source /usr/lib/openfoam/openfoam2212/etc/bashrc && \
     wmake elmerToFoamBC
     # /usr/lib/openfoam/openfoam2112/wmake/wmake elmerToFoamBC
 
@@ -191,14 +194,25 @@ RUN apt-get update && \
     mkdir scripts && \
     cd scripts && \
     echo "source /usr/lib/mc/mc-wrapper.sh" >> mc && \
-    chmod +x mc
-# ENV PATH=/home/scripts:$PATH
+    chmod +x mc && \
+    apt-get install -y tree
 
 
 # setup workingdirectory for mapping
-
 RUN mkdir /home/workdir
 WORKDIR /home/workdir
+
+# quality of life improvements (for root user)
+RUN cd ~ &&\
+        echo 'bind '"'"'"\e[A": history-search-backward'"'" >> $HOME/.bashrc && \
+        echo 'bind '"'"'"\e[B": history-search-forward'"'" >> $HOME/.bashrc && \
+        echo 'LS_COLORS=$LS_COLORS:'"'"'di=32:'"'"' ; export LS_COLORS' >> $HOME/.bashrc && \
+        echo "alias of2212='source /usr/lib/openfoam/openfoam2212/etc/bashrc '" >> $HOME/.bashrc && \
+        echo "alias mc='source /usr/lib/mc/mc-wrapper.sh'" >> $HOME/.bashrc
+
+# OpenFOAM enviroment variables
+RUN export WM_USER_PROJECT_DIR=/home/workdir/user-foam && \
+    export FOAM_RUN=/home/workdir/run
 
 # modify user id and group
 # see https://techflare.blog/permission-problems-in-bind-mount-in-docker-volume/

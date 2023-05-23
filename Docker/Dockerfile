@@ -19,7 +19,7 @@ FROM ubuntu:20.04
 LABEL maintainer="Arved Wintzer <arved.wintzer@ikz-berlin.de>"
 LABEL description="opencgs computation environment"
 
-ARG ELMER_COMMIT=7e41a0147cdead74c6c5744d136e42d4ae5f0ede
+ARG ELMER_COMMIT=c37d486543bf09fbc6adecb7fcd46f90d945fbd5
 ARG GMSH_VERSION=4.11.1
 
 ARG BUILD_ESSENTIAL_VERSION=12.8*
@@ -41,6 +41,7 @@ ARG PANDAS_VERSION=1.4.*
 ARG PYYAML_VERSION=6.0.*
 ARG PYELMER_VERSION=1.1.*
 ARG OBJECTGMSH_VERSION=0.*
+ARG PYVISTA_VERSION=0.39
 
 # deactivate interations -> no question for geolocation
 ENV DEBIAN_FRONTEND=noninteractive 
@@ -102,7 +103,8 @@ RUN apt-get update && \
         pandas==${PANDAS_VERSION} \
         pyyaml==${PYYAML_VERSION} \
         pyelmer==${PYELMER_VERSION} \
-        objectgmsh==${OBJECTGMSH_VERSION}
+        objectgmsh==${OBJECTGMSH_VERSION} \
+        pyvista==${PYVISTA_VERSION}
 
 # Install gmsh & dependencies
 # istructions found here: https://fenicsproject.discourse.group/t/problem-with-installation-of-latest-gmsh-4-6-0-via-pip/4078/2
