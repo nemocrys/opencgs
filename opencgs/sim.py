@@ -11,6 +11,7 @@ import pandas as pd
 import platform
 import shutil
 import sys
+import xml.etree.ElementTree as ET
 import yaml
 
 import opencgs
@@ -748,3 +749,168 @@ class DiameterIteration(Simulation):
         file."""
         with open(f"{self.res_dir}/Ttp_r.yml", "w") as f:
             yaml.dump(Ttp_r, f, sort_keys=False)
+
+
+class QuasiTransientSim(Simulation):
+    def __init__(
+            self,
+            quasi_transient,
+            geo,
+            geo_config,
+            sim,
+            sim_config,
+            mat_config,
+            config_update={},
+            sim_name="opencgs-quasi-transient",
+            base_dir="./simdata",
+            with_date=True,
+            metadata="",
+            simulation_class=SteadyStateSim,
+            **kwargs
+    ):
+        super().__init__(
+            geo,
+            geo_config,
+            sim,
+            sim_config,
+            mat_config,
+            config_update,
+            sim_name,
+            "qt",
+            base_dir,
+            with_date=with_date,
+            metadata=metadata,
+        )
+
+        with open(f"{self.input_dir}/quasi_transient.yml", "w") as f:
+            yaml.dump(quasi_transient, f)
+        
+        self.simulation_class = simulation_class
+        self.sims = []
+        self.create_sims(quasi_transient, kwargs)
+
+    def create_sims(self, quasi_transient, kwargs):
+        for step in quasi_transient:
+            crystal_length = step["length"]
+            v_pull = step["v_pull"]
+            config_update = {
+                "geometry": {"crystal": {"current_length": crystal_length}},
+                "simulation": {"general": {"v_pull": v_pull}},
+            }
+            sim_name = f"length={crystal_length}_vpull={v_pull}"
+            sim = self.simulation_class(
+                geo=self.geo,
+                geo_config=deepcopy(self.geo_config),
+                sim=self.sim,
+                sim_config=deepcopy(self.sim_config),
+                mat_config=deepcopy(self.mat_config),
+                config_update=config_update,
+                sim_name=sim_name,
+                base_dir=self.sim_dir,
+                with_date=False,
+                **kwargs,
+            )
+            self.sims.append(sim)
+
+    def execute(self):
+        """Execute parameter study in parallel. Linux (cluster): on all
+        CUPs, Windows (Laptop) on n-1 CPUs."""
+        count = multiprocessing.cpu_count()
+        # TODO not sure if that's a good idea...
+        if platform.system() == "Windows":
+            count -= 1
+        print("Working on ", count, " cores.")
+        pool = multiprocessing.Pool(processes=count)
+        pool.map(ParameterStudy._execute_sim, self.sims)
+        self.post()
+
+    @staticmethod
+    def _execute_sim(simulation):
+        simulation.execute()
+
+    def post(self):
+        """Run post-processing."""
+        for sim in self.sims:
+            for f in os.listdir(sim.res_dir):  # collect yaml files
+                ext = f.split(".")[-1]
+                if ext in ["yaml", "yml"]:
+                    shutil.copy2(
+                        f"{sim.res_dir}/{f}",
+                        f"{self.res_dir}/{f[:-(len(ext) + 1)]}_{sim.sim_name}.{ext}",
+                    )
+                if f == "NOT_CONVERGED":
+                    shutil.copy2(
+                        f"{sim.res_dir}/{f}",
+                        f"{self.res_dir}/{f}_{sim.sim_name}",
+                    )
+
+        # post.parameter_study(self.sim_dir, self.plot_dir)
+        self.create_plots()
+        self.create_pvd()
+
+    def create_plots(self):
+        probe_values = {}
+        for file in os.listdir(self.res_dir):
+            if file.split("_")[0] == "probes":
+                length = float(file.split("=")[1].split("_")[0])
+                with open(f"{self.res_dir}/{file}") as f:
+                    data = yaml.safe_load(f)
+                data.update({"length": length})
+                for key, value in data.items():
+                    if key in probe_values:
+                        probe_values[key].append(value)
+                    else:
+                        probe_values[key] = [value]
+        lengths = np.array(probe_values.pop("length"))
+        sort_indices = np.argsort(lengths)
+        for probe, values in probe_values.items():
+            fig, ax = plt.subplots()
+            ax.plot(lengths[sort_indices], np.array(values)[sort_indices])
+            ax.set_xlabel("crystal length")
+            ax.set_ylabel(probe)
+            fig.tight_layout()
+            fig.savefig(f"{self.plot_dir}/{probe}.png")
+            plt.close(fig)
+
+    def create_pvd(self):
+        length_simulation = {}
+        for simulation in os.listdir(self.sim_dir):
+            length = float(simulation.split("=")[1].split("_")[0])
+            length_simulation.update({length: simulation})
+
+        length_simulation = {k: length_simulation[k] for k in sorted(length_simulation.keys())}
+
+        main_tree = None
+        for length, simulation in length_simulation.items():
+            try:  # SteadyStateSim
+                simulation_subdir = "02_simulation"
+                tree = ET.parse(f'{self.sim_dir}/{simulation}/{simulation_subdir}/case.pvd')
+            except FileNotFoundError:  # CoupledSim
+                elmer_dirs = [x for x in os.listdir(f'{self.sim_dir}/{simulation}/02_simulation') if "elmer_" in x]
+                simulation_subdir = f"02_simulation/{sorted(elmer_dirs)[-1]}"
+                tree = ET.parse(f'{self.sim_dir}/{simulation}/{simulation_subdir}/case.pvd')
+            
+            root = tree.getroot()
+            
+            # Modify the "file" entry
+            for dataset in root.iter('DataSet'):
+                current_file = dataset.attrib['file']
+                dataset.attrib['file'] = f"{simulation}/{simulation_subdir}/{current_file}"
+            
+            # Modify the "timestep" entry
+            for dataset in root.iter('DataSet'):
+                dataset.set('timestep', str(length))
+            
+            if main_tree is None:
+                main_tree = tree
+                # main_tree.write(f"{sim_dir}/case.pvd")
+            else:
+                # main_tree = ET.parse(f"{sim_dir}/case.pvd")
+                main_root = main_tree.getroot()
+                main_collection = main_root.find("Collection")
+                new_collection = root.find("Collection")
+                for dataset in new_collection.findall('DataSet'):
+                    main_collection.append(dataset)
+                main_tree = ET.ElementTree(main_root)
+        main_tree.write(f"{self.sim_dir}/case.pvd")
+
