@@ -4,18 +4,22 @@ import inspect
 from importlib.metadata import version
 import matplotlib
 import matplotlib.pyplot as plt
+import meshio
 import multiprocessing
 import numpy as np
 import os
 import pandas as pd
 import platform
+import scipy.interpolate as interpolate
 import shutil
+import subprocess
 import sys
 import xml.etree.ElementTree as ET
 import yaml
 
 import opencgs
 from opencgs import post
+from opencgs.geo import compute_current_crystal_surface
 import pyelmer
 from pyelmer.execute import run_elmer_solver, run_elmer_grid
 from pyelmer.post import scan_logfile, dat_to_dataframe
@@ -908,3 +912,621 @@ class QuasiTransientSim(Simulation):
                 main_tree = ET.ElementTree(main_root)
         main_tree.write(f"{self.sim_dir}/case.pvd")
 
+
+class CoupledSim(Simulation):
+    def __init__(
+        self,
+        geo,
+        geo_config,
+        sim,  # Elmer
+        sim_config,  # Elmer
+        setup_openfoam,
+        setup_openfoam_config,
+        coupling_config,
+        mat_config,
+        config_update={},  # works currently only for Elmer
+        sim_name="opencgs-coupled-simulation",
+        base_dir="./simdata",
+        with_date=True,
+        metadata="",
+        **kwargs,
+    ):
+        super().__init__(
+            geo,
+            geo_config,
+            sim,
+            sim_config,
+            mat_config,
+            config_update,  # only for Elmer
+            sim_name,
+            "eo",
+            base_dir,
+            with_date=with_date,
+            metadata=metadata,
+        )
+
+        self.setup_openfoam = setup_openfoam
+        self.setup_openfoam_config = setup_openfoam_config
+        self.coupling_config = coupling_config
+        with open(self.input_dir + "/openfoam.yml", "w") as f:
+            yaml.dump(setup_openfoam_config, f)
+        with open(self.input_dir + "/coupling.yml", "w") as f:
+            yaml.dump(coupling_config, f)
+        of_file = inspect.getfile(self.geo)
+        shutil.copy2(of_file, self.input_dir + "/setup_openfoam.py")
+
+    @staticmethod
+    def is_float(value):
+        try:
+            float(value)
+            return True
+        except ValueError:
+            return False
+
+    @staticmethod
+    def clean_openfoam_meshio_data(mesh):
+        # TODO these fixes could be implemented in a cleaner way
+        mesh.point_data["U"][
+            :, 2
+        ] = 0  # remove z-component, it's wrong in point_data (correct in cell_data)
+        mesh.points[
+            :, 1
+        ] += 1e-5  # minimal shift to get better interpolation at melt surface
+
+    @staticmethod
+    def vtk_to_msh(vtk_file, foam_dir):
+        mesh = meshio.read(vtk_file)
+        CoupledSim.clean_openfoam_meshio_data(mesh)
+        mesh.write(f"{foam_dir}/VTK/of_result.msh", file_format="gmsh22", binary=False)
+
+    @staticmethod
+    def vtk_to_msh_update_variable_name(input_file_vtk, output_file_msh, old_name, new_name):
+        mesh = meshio.read(input_file_vtk)
+        CoupledSim.clean_openfoam_meshio_data(mesh)
+        mesh.point_data[new_name] = mesh.point_data.pop(old_name)
+        mesh.cell_data[new_name] = mesh.cell_data.pop(old_name)
+        mesh.write(output_file_msh, file_format="gmsh22", binary=False)
+
+    @staticmethod
+    def vtk_to_msh_with_u_old(vtk_file, vtk_file_old, foam_dir, flow_variable):
+        # this function assumes that both OpenFOAM simulations where run with a similar 
+        # structured mesh
+        mesh = meshio.read(vtk_file)
+        CoupledSim.clean_openfoam_meshio_data(mesh)
+        mesh_old = meshio.read(vtk_file_old)
+        CoupledSim.clean_openfoam_meshio_data(mesh_old)
+        mesh.point_data[f"{flow_variable}_old"] = mesh_old.point_data[flow_variable]
+        mesh.write(f"{foam_dir}/VTK/of_result.msh", file_format="gmsh22", binary=False)
+
+
+    @staticmethod
+    def relax_phase_if(
+        old_interface_interp=None,
+        new_interface_file="simdata_elmer/resutls/save_line_melt_crys.dat",
+        relaxation_factor=0.5,
+        visualize=False,
+        fix_coordinates=False,
+        crystal_radius=0.0,
+    ):
+        df = dat_to_dataframe(new_interface_file)
+        df = df.loc[df["Call count"] == df["Call count"].max()]
+        df = df.sort_values("coordinate 1")
+        df["coordinate 1"] = df["coordinate 1"].round(20)
+        df["coordinate 2"] = df["coordinate 2"].round(20)
+        if fix_coordinates:
+            # fix coordinates, required since mgdyn slightly shifts them
+            df.at[df['coordinate 1'].idxmin(), 'coordinate 1'] = 0
+            if crystal_radius != 0.0:
+                df.at[df['coordinate 1'].idxmax(), 'coordinate 1'] = crystal_radius
+        x = np.linspace(0, df["coordinate 1"].max(), 100)
+        if old_interface_interp is None:
+            old_interface_interp = interpolate.interp1d(
+                [x[0], x[-1]], 2 * [df["coordinate 2"][df.index[-1]]], kind="linear", fill_value="extrapolate"
+            )
+        new_interface_interp = interpolate.interp1d(
+            df["coordinate 1"], df["coordinate 2"], kind="linear", fill_value="extrapolate"
+        )
+        interface_relaxed = lambda x: relaxation_factor * new_interface_interp(x) + (
+            1 - relaxation_factor
+        ) * old_interface_interp(x)
+
+        if visualize:
+            fig, ax = plt.subplots()
+            # ax.plot(df["coordinate 1"], df["coordinate 2"], "x-", label="sorted raw data")
+            ax.plot(x, new_interface_interp(x), "x-", label="new interface")
+            ax.plot(x, old_interface_interp(x), "x-", label="old interface")
+            ax.plot(x, interface_relaxed(x), "x-", label="relaxed interface")
+            ax.legend()
+            plt.show()
+            plt.close(fig)
+
+        shutil.copy(
+            f"{new_interface_file[:-4]}.dat.names",
+            f"{new_interface_file[:-4]}_relaxed.dat.names",
+        )
+        df["coordinate 2"] = interface_relaxed(df["coordinate 1"])
+        df.to_csv(
+            f"{new_interface_file[:-4]}_relaxed.dat", header=False, sep=" ", index=False
+        )
+
+        return interface_relaxed
+
+    @staticmethod
+    def relax_temperatures_heatfluxes(
+        old_elmer_result,
+        new_elmer_result,
+        relaxation_factor=0.5,
+        visualize=False,
+        coordinate_tolerance=1e-4,
+    ):
+        # This only works if the mesh at the boundaries doesn't change betweeen the iterations
+        # It's not guaranteed but should be working, if not there will be an error
+        df_old = dat_to_dataframe(old_elmer_result)
+        df_old = df_old.loc[df_old["Call count"] == df_old["Call count"].max()]
+        df_old["coordinate 1"] = df_old.loc[:, "coordinate 1"].round(20)
+        df_old["coordinate 2"] = df_old.loc[:, "coordinate 2"].round(20)
+        df_old = df_old.drop_duplicates(subset=["Node index"]).sort_values(["coordinate 1", "coordinate 2"], ignore_index=True)
+
+        df_new = dat_to_dataframe(new_elmer_result)
+        df_new = df_new.loc[df_new["Call count"] == df_new["Call count"].max()]
+        df_new["coordinate 1"] = df_new.loc[:, "coordinate 1"].round(20)
+        df_new["coordinate 2"] = df_new.loc[:, "coordinate 2"].round(20)
+        df_new = df_new.drop_duplicates(subset=["Node index"]).sort_values(["coordinate 1", "coordinate 2"], ignore_index=True)
+
+        coord_diff = (
+            abs(df_old["coordinate 1"] - df_new["coordinate 1"]).sum()
+            + abs(df_old["coordinate 2"] - df_new["coordinate 2"]).sum()
+        )
+        if coord_diff > coordinate_tolerance:
+            raise ValueError(
+                f"The coordinates at the boundary do not agree, there is a total difference of {coord_diff:.2e} between {old_elmer_result} and {new_elmer_result}. Relaxation not possible."
+            )
+        df_relaxed = deepcopy(df_new)
+        for value in ["temperature", "temperature grad 1", "temperature grad 2"]:
+            df_relaxed[value] = (
+                relaxation_factor * df_new[value]
+                + (1 - relaxation_factor) * df_old[value]
+            )
+        if visualize:
+            fig, ax = plt.subplots(2, 3)
+            ax[0, 0].plot(df_old["coordinate 1"], df_old["temperature"], label="old")
+            ax[0, 0].plot(df_new["coordinate 1"], df_new["temperature"], label="new")
+            ax[0, 0].plot(
+                df_relaxed["coordinate 1"], df_relaxed["temperature"], label="relaxed"
+            )
+            ax[0, 0].set_xlabel("x in m")
+            ax[0, 0].set_ylabel("T in K")
+            ax[0, 0].grid(linestyle=":")
+            ax[0, 0].legend()
+
+            ax[0, 1].plot(
+                df_old["coordinate 1"], df_old["temperature grad 1"], label="old"
+            )
+            ax[0, 1].plot(
+                df_new["coordinate 1"], df_new["temperature grad 1"], label="new"
+            )
+            ax[0, 1].plot(
+                df_relaxed["coordinate 1"],
+                df_relaxed["temperature grad 1"],
+                label="relaxed",
+            )
+            ax[0, 1].set_xlabel("x in m")
+            ax[0, 1].set_ylabel("heat flux x in W/m^2")
+            ax[0, 1].grid(linestyle=":")
+
+            ax[0, 2].plot(
+                df_old["coordinate 1"], df_old["temperature grad 2"], label="old"
+            )
+            ax[0, 2].plot(
+                df_new["coordinate 1"], df_new["temperature grad 2"], label="new"
+            )
+            ax[0, 2].plot(
+                df_relaxed["coordinate 1"],
+                df_relaxed["temperature grad 2"],
+                label="relaxed",
+            )
+            ax[0, 2].set_xlabel("x in m")
+            ax[0, 2].set_ylabel("heat flux y in W/m^2")
+            ax[0, 2].grid(linestyle=":")
+
+            ax[1, 0].plot(df_old["coordinate 2"], df_old["temperature"], label="old")
+            ax[1, 0].plot(df_new["coordinate 2"], df_new["temperature"], label="new")
+            ax[1, 0].plot(
+                df_relaxed["coordinate 2"], df_relaxed["temperature"], label="relaxed"
+            )
+            ax[1, 0].set_xlabel("x in m")
+            ax[1, 0].set_ylabel("T in K")
+            ax[1, 0].grid(linestyle=":")
+
+            ax[1, 1].plot(
+                df_old["coordinate 2"], df_old["temperature grad 1"], label="old"
+            )
+            ax[1, 1].plot(
+                df_new["coordinate 2"], df_new["temperature grad 1"], label="new"
+            )
+            ax[1, 1].plot(
+                df_relaxed["coordinate 2"],
+                df_relaxed["temperature grad 1"],
+                label="relaxed",
+            )
+            ax[1, 1].set_xlabel("x in m")
+            ax[1, 1].set_ylabel("heat flux x in W/m^2")
+            ax[1, 1].grid(linestyle=":")
+
+            ax[1, 2].plot(
+                df_old["coordinate 2"], df_old["temperature grad 2"], label="old"
+            )
+            ax[1, 2].plot(
+                df_new["coordinate 2"], df_new["temperature grad 2"], label="new"
+            )
+            ax[1, 2].plot(
+                df_relaxed["coordinate 2"],
+                df_relaxed["temperature grad 2"],
+                label="relaxed",
+            )
+            ax[1, 2].set_xlabel("x in m")
+            ax[1, 2].set_ylabel("heat flux y in W/m^2")
+            ax[1, 2].grid(linestyle=":")
+
+            fig.tight_layout()
+            plt.show()
+
+        df_relaxed.to_csv(
+            f"{new_elmer_result[:-4]}_relaxed.dat", header=False, sep=" ", index=False
+        )
+
+    @staticmethod
+    def check_interface_convergence(
+        old_interface, new_interface, x_max, number_of_points
+    ):
+        x = np.linspace(0, x_max, number_of_points)
+        x = np.round(
+            x, 20
+        )  # this has to be lower than the rounding in relax_phase_if to avoid out of range error
+        y_old = old_interface(x)
+        y_new = new_interface(x)
+        avg_change = np.abs(y_old - y_new).mean()
+        max_change = np.abs(y_old - y_new).max()
+        return avg_change, max_change, y_new[0]
+
+    @staticmethod
+    def extract_phase_if(input_file="simdata_elmer/resutls/save_line_melt_crys.dat"):
+        df = dat_to_dataframe(input_file)
+        df = df.loc[df["Call count"] == df["Call count"].max()]
+
+        _x = df["coordinate 1"].to_numpy()
+        _y = df["coordinate 2"].to_numpy()
+
+        x = [_x[i] for i in _x.argsort()]
+        y = [_y[i] for i in _x.argsort()]
+
+        points = []
+        for i in range(len(x)):
+            points.append([float(round(x[-i - 1], 20)), float(round(y[-i - 1], 20))])
+        uniquie_points = list(
+            set(map(tuple, points))
+        )  # remove duplicates (ChatGPT code)
+        return {"phase_if": points}
+
+    @staticmethod
+    def read_and_update_pvd(base_dir, elmer_dir, timestep):
+        # Parse the XML files
+        tree = ET.parse(f"{base_dir}/{elmer_dir}/case.pvd")
+        root = tree.getroot()
+
+        # Modify the "file" entry
+        for dataset in root.iter("DataSet"):
+            current_file = dataset.attrib["file"]
+            dataset.attrib["file"] = f"{elmer_dir}/{current_file}"
+
+        # Modify the "timestep" entry
+        for dataset in root.iter("DataSet"):
+            dataset.set("timestep", str(timestep))
+
+        pvd_file = f"{base_dir}/elmer-result.pvd"
+        if timestep == 0:  # write directly
+            tree.write(pvd_file)
+        else:  # update old tree, write then
+            old_tree = ET.parse(pvd_file)
+            old_root = old_tree.getroot()
+            collection_old = old_root.find("Collection")
+            collection_update = root.find("Collection")
+            for dataset in collection_update.findall("DataSet"):
+                collection_old.append(dataset)
+            new_tree = ET.ElementTree(old_root)
+            new_tree.write(pvd_file)
+
+    @staticmethod
+    def is_converged(openfoam_logfile):
+        with open(openfoam_logfile) as log_file:
+            log_lines = log_file.readlines()[-15:]  # check last lines only
+        return any("solution converged" in line for line in reversed(log_lines))
+
+    def execute(self):
+        last_foam_dir = None
+        last_vtk_file = None
+        last_elmer_dir = None
+        if self.coupling_config["transient_flow"]:
+            flow_variable = "UMean_avg300s"
+        else:
+            flow_variable = "U"
+        openfoam_converged = True  # used for steady state simulations only
+        last_openfoam_converged = True
+        coupling_converged = False
+        for i in range(self.coupling_config["maximum_iterations"]):
+            if i > 0:
+                last_elmer_dir = elmer_dir
+                last_foam_dir = foam_dir
+                last_vtk_file = vtk_file
+            elmer_dir = f"{self.sim_dir}/elmer_{i+1:02}"
+            if not os.path.exists(elmer_dir):
+                os.makedirs(elmer_dir)
+            if i > 0:
+                shutil.copy(
+                    f"{foam_simdir}/VTK/of_result.msh", f"{elmer_dir}/of_result.msh"
+                )
+            foam_dir = f"{self.sim_dir}/openfoam_{i+1:02}"
+            with open(f"{elmer_dir}/config_geo.yml", "w") as f:
+                yaml.safe_dump(self.geo_config, f, sort_keys=False)
+            # run elmer
+            model = self.geo(deepcopy(self.geo_config), elmer_dir)
+            if i in self.coupling_config["flow_scaling"]:
+                flow_scaling = self.coupling_config["flow_scaling"][i]
+            else:
+                flow_scaling = 1
+            if i in self.coupling_config["heat_conductivity_scaling"]:
+                heat_conductivity_scaling = self.coupling_config["heat_conductivity_scaling"][i]
+            else:
+                heat_conductivity_scaling = 1
+            if i == 0:
+                self.sim(model, self.sim_config, elmer_dir, self.mat_config, heat_conductivity_scaling=heat_conductivity_scaling)
+            elif i == 1:  # flow relaxation not yet possible
+                self.sim(
+                        model,
+                        self.sim_config,
+                        elmer_dir,
+                        self.mat_config,
+                        with_flow=True,
+                        u_scaling=flow_scaling,
+                        flow_variable=flow_variable,
+                        heat_conductivity_scaling=heat_conductivity_scaling,
+                    )
+            else:  # with flow relaxation
+                self.sim(
+                    model,
+                    self.sim_config,
+                    elmer_dir,
+                    self.mat_config,
+                    with_flow=True,
+                    u_scaling=flow_scaling,
+                    flow_variable=flow_variable,
+                    flow_variable_old=f"{flow_variable}_old",
+                    flow_relaxation_factor=self.coupling_config["flow_relaxation_factor"],
+                )
+            print("Running ElmerGrid...")
+            run_elmer_grid(elmer_dir, "case.msh")
+            print("Running ElmerSolver...")
+            run_elmer_solver(elmer_dir)
+            err, warn, stats = scan_logfile(elmer_dir)
+            print("Errors:", err)
+            print("Warnings:", warn)
+            print("Statistics:", stats)
+            self._postprocessing_probes_2(elmer_dir, elmer_dir)
+            self.read_and_update_pvd(self.sim_dir, f"elmer_{i+1:02}", i)
+            print("Relaxing interface, checking for convergence")
+            if i == 0:
+                old_interface = self.relax_phase_if(
+                    None,
+                    f"{elmer_dir}/results/save_line_melt_crys.dat",
+                    self.coupling_config["relaxation_factor"],
+                )
+            else:
+                for file in ["save_line_crc_melt.dat", "save_line_melt_surf.dat"]:
+                    self.relax_temperatures_heatfluxes(
+                        f"{last_elmer_dir}/results/{file}",
+                        f"{elmer_dir}/results/{file}",
+                        self.coupling_config["relaxation_factor"],
+                    )
+                new_interface = self.relax_phase_if(
+                    old_interface,
+                    f"{elmer_dir}/results/save_line_melt_crys.dat",
+                    self.coupling_config["relaxation_factor"],
+                )
+                # crystal_surface, _ = compute_current_crystal_surface(
+                #     **self.geo_config["crystal"]
+                # )
+                try:  # as applied in Si simulation with complex crystal shape
+                    crystal_radius = self.geo_config["process_condition"]["crystal_radius"]
+                except KeyError:
+                    try:  # as applied in Sn simulation with simple cylindrical / conical crystal shape
+                        crystal_radius = self.geo_config["crystal"]["r"]
+                    except KeyError:  # as applied in CsI simulation with complex crystal shape
+                        compute_current_crystal_surface(**self.geo_config["crystal"])[-1, 0]
+
+                avg_change, max_change, y_new_0 = self.check_interface_convergence(
+                    old_interface,
+                    new_interface,
+                    crystal_radius,
+                    self.coupling_config["interface_number_of_points"],
+                )
+                print(f"Average change at phase interface: {avg_change:.3e}")
+                print("***************************************")
+                print(f"Maximum change at phase interface: {max_change:.3e}")
+                print("***************************************")
+                print(f"Deflection at r = 0: {y_new_0:.3e}")
+                print("***************************************")
+                with open(f"{self.sim_dir}/interface_convergence_avg.log", "a") as f:
+                    f.write(f"{i+1:02}    {avg_change:.3e}\n")
+                with open(f"{self.sim_dir}/interface_convergence_max.log", "a") as f:
+                    f.write(f"{i+1:02}    {max_change:.3e}\n")
+                with open(f"{self.sim_dir}/interface_deflection_r=0.log", "a") as f:
+                    f.write(f"{i+1:02}    {y_new_0:.3e}\n")
+                if (
+                    max_change < self.coupling_config["tolerance_phase_interface"]
+                    and openfoam_converged  # checked for steady state only
+                    and last_openfoam_converged  # checked for steady state only
+                    and i > max(self.coupling_config["flow_scaling"])
+                    and i > max(self.coupling_config["heat_conductivity_scaling"])
+                ):
+                    coupling_converged = True
+                    print("Converged!")
+                    break
+                old_interface = new_interface
+
+            # run openFoam
+            if self.coupling_config["OpenFOAM_3D"]:
+                if not self.coupling_config["transient_flow"]:
+                    raise ValueError("2D-3D-coupling only available with transient flow simulation.")
+                shutil.copytree("./azimuthalAverage", foam_dir)
+                self.setup_openfoam(
+                    3,
+                    f"{foam_dir}/3D-case",
+                    f"{elmer_dir}/results",
+                    self.setup_openfoam_config["template_3D"],
+                    highres=False,
+                )
+                self.setup_openfoam(
+                    2,
+                    f"{foam_dir}/2D-case",
+                    f"{elmer_dir}/results",
+                    self.setup_openfoam_config["template_transient"],
+                    highres=False,
+                )
+
+                foam_simdir = f"{foam_dir}/3D-case"
+                last_foam_simdir = f"{last_foam_dir}/3D-case"
+            elif self.coupling_config["transient_flow"]:
+                self.setup_openfoam(
+                    2,
+                    foam_dir,
+                    f"{elmer_dir}/results",
+                    self.setup_openfoam_config["template_transient"],
+                )
+                foam_simdir = foam_dir
+                last_foam_simdir = last_foam_dir                
+            else:
+                self.setup_openfoam(
+                    2,
+                    foam_dir,
+                    f"{elmer_dir}/results",
+                    self.setup_openfoam_config["template_steady"],
+                )
+                foam_simdir = foam_dir
+                last_foam_simdir = last_foam_dir
+            if (
+                last_foam_dir is not None
+            ):  # copy old results to initialize new simulation
+                print("Obtaining last simulation results for initialization.")
+                highest_number = 0
+                for item in os.listdir(last_foam_simdir):
+                    item_path = os.path.join(last_foam_simdir, item)
+                    if os.path.isdir(item_path) and self.is_float(item):
+                        number = float(item)
+                        if number > highest_number:
+                            highest_number = number
+                            highest_directory = item_path
+                print(f"Found results in '{highest_directory}'")
+                os.remove(f"{foam_simdir}/0.orig/U")
+                os.remove(f"{foam_simdir}/0.orig/T")
+                shutil.copy(f"{highest_directory}/U", f"{foam_simdir}/0.orig/U")
+                shutil.copy(f"{highest_directory}/T", f"{foam_simdir}/0.orig/T")
+            print("Running OpenFOAM...")
+            with open(os.path.join(foam_simdir, "allrun.log"), "w") as f:
+                subprocess.run(["chmod", "+x", "Allrun"], cwd=foam_simdir)
+                subprocess.run(["./Allrun"], cwd=foam_simdir, stdout=f, stderr=f)
+            if self.coupling_config["OpenFOAM_3D"]:
+                with open(os.path.join(foam_dir, "runAzimuthalAveraging.log"), "w") as f:
+                    subprocess.run(["chmod", "+x", "runAzimuthalAveraging"], cwd=foam_dir)
+                    subprocess.run(["./runAzimuthalAveraging"], cwd=foam_dir, stdout=f, stderr=f)
+                foam_simdir = f"{foam_dir}/simdata-2D-averaged"
+                last_foam_simdir = f"{last_foam_dir}/simdata-2D-averaged"
+            print("Converting Foam to VTK...")
+            with open(os.path.join(foam_dir, "f2vtk.log"), "w") as f:
+                subprocess.run(
+                    ["foamToVTK", "-latestTime", "-legacy", "-ascii"],
+                    cwd=foam_simdir,
+                    stdout=f,
+                    stderr=f,
+                )
+            print("Converting VTK to msh...")
+            files = os.listdir(f"{foam_simdir}/VTK")
+            for file in files:
+                if file.split(".")[-1] == "vtk":
+                    vtk_file = file
+            if i == 0:
+                self.vtk_to_msh(f"{foam_simdir}/VTK/{vtk_file}", foam_simdir)
+            else:
+                self.vtk_to_msh_with_u_old(
+                    f"{foam_simdir}/VTK/{vtk_file}",
+                    f"{last_foam_simdir}/VTK/{last_vtk_file}",
+                    foam_simdir,
+                    flow_variable,
+                )
+            if not self.coupling_config["transient_flow"]:
+                last_openfoam_converged = openfoam_converged
+                openfoam_converged = self.is_converged(
+                    f"{foam_dir}/log.buoyantBoussinesqSimpleFoam"
+                )
+                with open(f"{self.sim_dir}/openfoam_convergence.log", "a") as f:
+                    f.write(f"{i+1:02}    {openfoam_converged}\n")
+
+            phase_if = self.extract_phase_if(
+                f"{elmer_dir}/results/save_line_melt_crys_relaxed.dat"
+            )
+            self.geo_config.update(phase_if)
+        err, warn, stats = scan_logfile(elmer_dir)
+        with open(self.res_dir + "/elmer_summary.yml", "w") as f:
+            yaml.dump(
+                {"Errors": err, "Warnings": warn, "Statistics": stats},
+                f,
+                sort_keys=False,
+            )
+        if coupling_converged:
+            with open(f"{self.res_dir}/CONVERGED", 'w') as file: pass
+        else:
+            with open(f"{self.res_dir}/NOT_CONVERGED", 'w') as file: pass
+        self._postprocessing_probes_2(elmer_dir)
+
+    def _postprocessing_probes_2(self, sim_dir=None, res_dir=None):
+        # this is a re-implementation of _postprocessing_probes, supposed to be more stable
+        if sim_dir is None:
+            sim_dir = self.sim_dir
+        if res_dir is None:
+            res_dir = self.res_dir
+
+        with open(sim_dir + "/probes.yml") as f:
+            probes = list(yaml.safe_load(f).keys())
+        df = dat_to_dataframe(sim_dir + "/results/probes.dat")
+
+        new_names_dict = {}
+        probe_idx = -1
+        for old_name in df.columns.tolist():
+            if "value" in old_name:
+                if "coordinate 1" in old_name:  # assumes same probe sorting as in yaml-file
+                    probe_idx += 1
+                new_name = probes[probe_idx] + " " + old_name[7:].split(" in element ")[0]
+            if "res" in old_name:
+                new_name = "res " + old_name[5:]
+            new_names_dict[old_name] = new_name
+        df.rename(columns=new_names_dict, inplace=True)
+
+        # keep only temperature and "res" columns
+        columns_list = []
+        for column in df.columns.tolist():
+            if "temperature" in column and not "temperature " in column:
+                columns_list.append(column)
+            if "res " in column:
+                columns_list.append(column)
+        df = df[columns_list]
+
+        data = {}
+        for column in df.iteritems():
+            data.update({column[0]: float(column[1].iloc[-1])})
+        if sim_dir == res_dir:
+            output_name = "probes_result"
+        else:
+            output_name = "probes"
+        with open(f"{res_dir}/{output_name}.yml", "w") as f:
+            yaml.dump(data, f)
+        self.probe_data = data
+        df.to_csv(f"{res_dir}/{output_name}.csv", index=False, sep=";")
