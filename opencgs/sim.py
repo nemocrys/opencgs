@@ -18,7 +18,7 @@ import opencgs
 from opencgs import post
 import pyelmer
 from pyelmer.execute import run_elmer_solver, run_elmer_grid
-from pyelmer.post import scan_logfile
+from pyelmer.post import scan_logfile, dat_to_dataframe
 
 
 # for documentation of applied versions
@@ -138,48 +138,42 @@ class Simulation:
             data[i] = data[i][6:-1]  # remove index and \n
         return data
 
-    def _postprocessing_probes(self):  # TODO copied from sim-elmerthermo. Dublecheck!
-        with open(self.sim_dir + "/probes.yml") as f:
+    def _postprocessing_probes(self):
+        sim_dir = self.sim_dir
+        res_dir = self.res_dir
+
+        with open(sim_dir + "/probes.yml") as f:
             probes = list(yaml.safe_load(f).keys())
-        names_data = self._read_names_file(self.sim_dir + "/results/probes.dat.names")
-        values = []
-        res = []
-        for column in names_data:
-            if "value: " in column:
-                values.append(
-                    column[7:].split(" in element ")[0]
-                )  # remove 'value: ' and 'in element XX'
-            if "res: " in column:
-                res.append("res " + column[5:])
-        values = values[: int(len(values) / len(probes))]  # remove duplicates
-        header = []
-        for probe in probes:
-            for value in values:
-                header.append(probe + " " + value)
-        header_shortened = []
-        for column in header:
-            if "temperature" in column and not "loads" in column:
-                header_shortened.append(column)
-        for column in header:
-            if "magnetic flux density" in column and "MF" in column:
-                header_shortened.append(column)
-        header += res
-        header_shortened += res
-        df = pd.read_table(
-            self.sim_dir + "/results/probes.dat",
-            names=header,
-            sep=" ",
-            skipinitialspace=True,
-        )
-        df = df[header_shortened]
+        df = dat_to_dataframe(sim_dir + "/results/probes.dat")
+
+        new_names_dict = {}
+        probe_idx = -1
+        for old_name in df.columns.tolist():
+            if "value" in old_name:
+                if "coordinate 1" in old_name:  # assumes same probe sorting as in yaml-file
+                    probe_idx += 1
+                new_name = probes[probe_idx] + " " + old_name[7:].split(" in element ")[0]
+            if "res" in old_name:
+                new_name = "res " + old_name[5:]
+            new_names_dict[old_name] = new_name
+        df.rename(columns=new_names_dict, inplace=True)
+
+        # keep only temperature and "res" columns
+        columns_list = []
+        for column in df.columns.tolist():
+            if "temperature" in column and not "temperature " in column:
+                columns_list.append(column)
+            if "res " in column:
+                columns_list.append(column)
+        df = df[columns_list]
 
         data = {}
         for column in df.iteritems():
             data.update({column[0]: float(column[1].iloc[-1])})
-        with open(self.res_dir + "/probes.yml", "w") as f:
+        with open(res_dir + "/probes.yml", "w") as f:
             yaml.dump(data, f)
         self.probe_data = data
-        df.to_csv(self.res_dir + "/probes.csv", index=False, sep=";")
+        df.to_csv(res_dir + "/probes.csv", index=False, sep=";")
 
     def execute(self):
         """Execute the simulation."""
