@@ -20,7 +20,7 @@ LABEL maintainer="Arved Wintzer <arved.wintzer@ikz-berlin.de>"
 LABEL description="opencgs computation environment"
 
 ARG ELMER_COMMIT=c37d486543bf09fbc6adecb7fcd46f90d945fbd5
-ARG ELMER_TO_FOAM_COMMIT=739466ac0c2d107b84b53f7067ccdfd24cd0784d
+ARG ELMER_TO_FOAM_COMMIT=37a860276fb1b5bf2ec915b4ab235d9be513d255
 ARG GMSH_VERSION=4.11.1
 
 ARG BUILD_ESSENTIAL_VERSION=12.8*
