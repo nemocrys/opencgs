@@ -387,6 +387,82 @@ def crucible(
 
     return crc
 
+def crucible_support(
+    model,
+    dim,
+    r_in,
+    r_out,
+    h,
+    top_shape,
+    char_l=0,
+    T_init=273.15,
+    material="",
+    name="crucible_support",
+):
+    sup = Shape(model, dim, name)
+    sup.params.r_in = r_in
+    sup.params.r_out = r_out
+    sup.params.h = h
+    sup.params.X0 = [r_in, top_shape.params.X0[1] - h]
+    sup.params.T_init = T_init
+    sup.params.material = material
+    if char_l == 0:
+        sup.mesh_size = min([h, r_out - r_in]) / 5
+    else:
+        sup.mesh_size = char_l
+
+    body = cylinder(0, sup.params.X0[1], 0, r_out, h, dim)
+    if r_in != 0:
+        hole = cylinder(0, sup.params.X0[1], 0, r_in, h, dim)
+        factory.cut([(dim, body)], [(dim, hole)])
+        factory.synchronize()
+    sup.geo_ids = [body]
+    sup.set_interface(top_shape)
+    return sup
+
+def crucible_adapter(
+    model,
+    dim,
+    r_in_top,
+    r_in_bt,
+    r_out,
+    h_top,
+    h_bt,
+    top_shape,
+    char_l=0,
+    T_init=273.15,
+    material="",
+    name="crucible_adapter",
+):
+    adp = Shape(model, dim, name)
+    adp.params.r_in_top = r_in_top
+    adp.params.r_in_bt = r_in_bt
+    adp.params.r_out = r_out
+    adp.params.h_top = h_top
+    adp.params.h_bt = h_bt
+    adp.params.X0 = [r_in_bt, top_shape.params.X0[1] - h_top]
+    adp.params.T_init = T_init
+    adp.params.material = material
+    if char_l == 0:
+        adp.mesh_size = min([r_out - r_in_top, r_out - r_in_bt, h_top + h_bt]) / 5
+    else:
+        adp.mesh_size = char_l
+
+    body = cylinder(0, adp.params.X0[1] - h_bt, 0, r_out, h_top + h_bt, dim)
+    holes = []
+    if r_in_top != 0:
+        hole1 = cylinder(0, adp.params.X0[1], 0, r_in_top, h_top, dim)
+        holes.append((dim, hole1))
+    if r_in_bt != 0:
+        hole2 = cylinder(0, adp.params.X0[1] - h_bt, 0, r_in_bt, h_bt, dim)
+        holes.append((dim, hole2))
+    if holes != []:
+        factory.cut([(dim, body)], holes)
+        factory.synchronize()
+    adp.geo_ids = [body]
+    adp.set_interface(top_shape)
+    return adp
+
 def melt(
     model,
     dim,
@@ -528,6 +604,86 @@ def melt(
         model.remove_shape(phase_if)
     return melt
 
+def crystal(
+    model,
+    dim,
+    r,
+    l,
+    r_top=-1,
+    char_l=0,
+    T_init=273.15,
+    X0=[0, 0],
+    material="",
+    melt=None,
+    phase_if=None,
+    name="crystal",
+):
+    """Cylindrical / conical crystal.
+
+    Args:
+        model (Model): objectgmsh model
+        dim (int): dimension
+        r (float): crystal radius
+        l (float): crystal length
+        r_top (float, optional): top radius of conical crystal. Defaults
+            to -1 -> cylindrical crystal shape
+        char_l (float, optional): mesh size characteristic length.
+            Defaults to 0.
+        T_init (float, optional): initial temperature. Defaults to
+            273.15.
+        X0 (list, optional): origin of crystal (bottom of symmetry
+            axis), if not in contact with melt. Defaults to [0, 0].
+        material (str, optional): material name. Defaults to "".
+        melt (Shape, optional): melt object, if the crystal is in
+            contact with melt. Defaults to None.
+        phase_if (shape, optional): phase boundary shape. Defaults to
+            None.
+        name (str, optional): name of the shape. Defaults to "crystal".
+
+    Returns:
+        Shape: objectgmsh shape
+    """
+    crys = Shape(model, dim, name)
+    crys.params.r = r
+    crys.params.l = l
+    crys.params.T_init = T_init
+    crys.params.material = material
+    if char_l == 0:
+        crys.mesh_size = r / 10
+    else:
+        crys.mesh_size = char_l
+
+    if melt is None:  # detached crystal
+        crys.params.X0 = X0
+        if r_top != -1:
+            raise NotImplementedError("Non-cylindrical shapes not supported if crystal is not in contact with melt.")
+        crys.geo_ids = [cylinder(X0[0], X0[1], 0, r, l, dim)]
+    else:  # in contact with melt
+        crys.params.X0 = [0, melt.params.X0[1] + melt.params.h_meniscus]
+        if phase_if is None:
+            bottom_left = factory.addPoint(crys.params.X0[0], crys.params.X0[1], 0)
+            bottom_right = factory.addPoint(crys.params.X0[0] + r, crys.params.X0[1], 0)
+        else:
+            bottom_left = phase_if.left_boundary
+            bottom_right = phase_if.right_boundary
+        top_left = factory.addPoint(0, crys.params.X0[1] + l, 0)
+        if r_top == -1:  # cylindrical shape
+            top_right = factory.addPoint(r, crys.params.X0[1] + l, 0)
+        else:
+            top_right = factory.addPoint(r_top, crys.params.X0[1] + l, 0)
+        left = factory.addLine(bottom_left, top_left)
+        top = factory.addLine(top_left, top_right)
+        right = factory.addLine(top_right, bottom_right)
+        if phase_if is None:
+            bottom = factory.addLine(bottom_right, bottom_left)
+            loop = factory.addCurveLoop([left, top, right, bottom])
+        else:
+            loop = factory.addCurveLoop([left, top, right, phase_if.geo_id])
+            model.remove_shape(phase_if)
+        crys.geo_ids = [factory.addSurfaceFilling(loop)]
+        crys.set_interface(melt)
+    return crys
+
 def crystal_from_points(model,
     dim,
     surface_points,
@@ -590,6 +746,23 @@ def crystal_from_points(model,
 
     return crys
 
+def seed(model, dim, crystal, r, l, char_l=0, T_init=273.15, material="", name="seed"):
+    seed = Shape(model, dim, name)
+    seed.params.l = l
+    seed.params.r = r
+    seed.params.X0 = [0, crystal.params.X0[1] + crystal.params.l]
+    seed.params.T_init = T_init
+    seed.params.material = material
+    if char_l == 0:
+        seed.mesh_size = r / 5
+    else:
+        seed.mesh_size = char_l
+
+    seed.geo_ids = [cylinder(0, seed.params.X0[1], 0, r, l, dim)]
+    seed.set_interface(crystal)
+
+    return seed
+
 def inductor(
     model,
     dim,
@@ -651,6 +824,110 @@ def inductor(
         y += g + d
 
     return ind
+
+def heater(model, dim, r_in, h_over_floor, h, t, vessel, char_l=0, T_init=700, material="", name="heater"):
+    heater = Shape(model, dim, name)
+    heater.params.r_in = r_in
+    heater.params.h_over_floor = h_over_floor
+    heater.params.h = h
+    heater.params.t = t
+    heater.params.X0 = [r_in, vessel.params.X0[1] + vessel.params.t + h_over_floor]
+    heater.params.T_init = T_init
+    heater.params.material = material
+    if char_l == 0:
+        heater.mesh_size = t/4
+    else:
+        heater.mesh_size = char_l
+    
+    heater.geo_ids = [factory.add_rectangle(heater.params.X0[0], heater.params.X0[1], 0, t, h)]
+
+    return heater
+
+def insulation(model, dim, bottom_r_in, bottom_t, side_h, side_r_in, side_t, top_r_in, top_t, vessel, char_l=0, T_init=293.15, material="", name="insulation"):
+    ins = Shape(model, dim, name)
+    ins.params.X0 = [bottom_r_in, vessel.params.X0[1] + vessel.params.t]
+    ins.params.material = material
+    if char_l == 0:
+        ins.mesh_size = bottom_t / 10
+    else:
+        ins.mesh_size = char_l
+
+    bottom = factory.add_rectangle(ins.params.X0[0], ins.params.X0[1], 0, side_r_in + side_t - bottom_r_in, bottom_t)
+    ins.geo_ids.append(bottom)
+    if side_h != 0:
+        side = factory.add_rectangle(side_r_in, ins.params.X0[1] + bottom_t, 0, side_t, side_h)
+        factory.fragment([(dim, bottom)], [(dim, side)])
+        ins.geo_ids.append(side)
+        if top_t != 0:
+            top = factory.add_rectangle(top_r_in, ins.params.X0[1] + bottom_t + side_h, 0, side_r_in + side_t - top_r_in, top_t)
+            factory.fragment([(dim, side)], [(dim, top)])
+            ins.geo_ids.append(top)
+    ins.set_interface(vessel)
+    return ins
+
+def axis_top(
+    model,
+    dim,
+    bot_shape,
+    r,
+    l=0,
+    vessel=None,
+    char_l=0,
+    T_init=273.15,
+    material="",
+    name="axis_top",
+):
+    ax = Shape(model, dim, name)
+    ax.params.r = r
+    try:
+        ax.params.X0 = [0, bot_shape.params.X0[1] + bot_shape.params.l]
+    except AttributeError:
+        ax.params.X0 = [0, bot_shape.params.X0[1] + bot_shape.params.h]
+    ax.params.material = material
+    if l == 0:
+        if vessel is None:
+            raise ValueError("If l=0 a vessel shape must be provided.")
+        l = vessel.params.X0[1] + vessel.params.t + vessel.params.h_in - ax.params.X0[1]
+    ax.params.l = l
+    if char_l == 0:
+        ax.mesh_size = r / 4
+    else:
+        ax.mesh_size = char_l
+
+    ax.geo_ids = [cylinder(0, ax.params.X0[1], 0, r, l, dim)]
+    ax.set_interface(bot_shape)
+    if vessel is not None:
+        ax.set_interface(vessel)
+
+    return ax
+
+def exhaust_hood(
+    model,
+    dim,
+    points,
+    y_bot=0,  # coordinate of vessel bottom surface
+    char_l=0,
+    T_init=273.15,
+    material="",
+    name="exhaust_hood",
+):
+    exh = Shape(model, dim, name)
+    exh.params.material = material
+    exh.params.T_init = T_init
+    exh.mesh_size = 0.01 if char_l == 0 else char_l
+
+    points = np.array(points)
+    points[:, 1] += y_bot
+    pts = [factory.add_point(x[0], x[1], 0) for x in points.tolist()]
+    lines = [factory.add_line(pts[i-1], pts[i]) for i in range(len(pts))]
+    loop = factory.add_curve_loop(lines)
+    surf = factory.add_surface_filling(loop)
+    if dim == 2:
+        exh.geo_ids = [surf]
+    elif dim == 3:
+        exh.geo_ids = [rotate(surf)]
+    factory.synchronize()
+    return exh
 
 def vessel(
     model,
