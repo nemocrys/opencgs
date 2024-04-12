@@ -1341,7 +1341,7 @@ class CoupledSim(Simulation):
                     try:  # as applied in Sn simulation with simple cylindrical / conical crystal shape
                         crystal_radius = self.geo_config["crystal"]["r"]
                     except KeyError:  # as applied in CsI simulation with complex crystal shape
-                        compute_current_crystal_surface(**self.geo_config["crystal"])[-1, 0]
+                        crystal_radius = compute_current_crystal_surface(**self.geo_config["crystal"])[0][-1, 0]
 
                 avg_change, max_change, y_new_0 = self.check_interface_convergence(
                     old_interface,
