@@ -230,4 +230,4 @@ RUN export WM_USER_PROJECT_DIR=/home/workdir/user-foam && \
 # see https://techflare.blog/permission-problems-in-bind-mount-in-docker-volume/
 RUN apt-get update && \
     apt-get -y install gosu 
-ENTRYPOINT [ "/home/opencgs/entrypoint.sh" ]
+ENTRYPOINT [ "/home/opencgs/Docker/entrypoint.sh" ]
