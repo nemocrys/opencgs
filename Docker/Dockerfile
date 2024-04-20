@@ -20,6 +20,8 @@ LABEL maintainer="Arved Wintzer <arved.wintzer@ikz-berlin.de>"
 LABEL description="opencgs computation environment"
 
 ARG ELMER_COMMIT=c37d486543bf09fbc6adecb7fcd46f90d945fbd5
+ARG ELMER_TO_FOAM_COMMIT=61b9089ea6ccc161023ee55da437254c366cabf0
+ARG NEMOFOAM_UTILS_COMMIT=fc29cf9f3071a28895be5156f1d917b05125ea65
 ARG GMSH_VERSION=4.11.1
 
 ARG BUILD_ESSENTIAL_VERSION=12.8*
@@ -41,6 +43,7 @@ ARG PANDAS_VERSION=1.4.*
 ARG PYYAML_VERSION=6.0.*
 ARG PYELMER_VERSION=1.1.*
 ARG OBJECTGMSH_VERSION=0.*
+ARG NEMOBLOCK_VERSION=1.0.*
 ARG PYVISTA_VERSION=0.39
 
 # deactivate interations -> no question for geolocation
@@ -104,6 +107,7 @@ RUN apt-get update && \
         pyyaml==${PYYAML_VERSION} \
         pyelmer==${PYELMER_VERSION} \
         objectgmsh==${OBJECTGMSH_VERSION} \
+        nemoblock==${NEMOBLOCK_VERSION} \
         pyvista==${PYVISTA_VERSION}
 
 # Install gmsh & dependencies
@@ -122,6 +126,75 @@ RUN apt-get update && \
 ENV PYTHONPATH=/home/gmsh-${GMSH_VERSION}-Linux64-sdk/lib:$PYTHONPATH
 ENV PATH=/home/gmsh-${GMSH_VERSION}-Linux64-sdk/bin:$PATH
 
+# setup openFOAM
+RUN apt-get update && \
+        apt-get install -y \
+        vim \
+        ssh \
+        sudo \
+        wget \
+        git \
+        software-properties-common ;\
+        rm -rf /var/lib/apt/lists/*
+
+
+# Dependencies for Ubuntu 20.04 LTS
+RUN apt-get update && \
+        apt-get install -y \
+        apt-utils \
+        git-core \
+        build-essential \
+        binutils-dev \
+        cmake \
+        flex \
+        zlib1g-dev \
+        libncurses5-dev \
+        curl \
+        bison \
+        libxt-dev \
+        rpm \
+        mercurial \
+        graphviz \
+        python \
+        python-dev  \
+        gcc-7 \
+        g++-7 \
+        mpich
+
+RUN pip3 install \
+    pyFoam==2021.*
+
+# get source code
+RUN wget -q -O - https://dl.openfoam.com/add-debian-repo.sh | bash && \
+    apt-get install -y ca-certificates && \
+    apt-get update
+        
+# change to bash shell, else source does not work
+SHELL ["/bin/bash", "-c"]
+
+RUN apt-get update && \ 
+    apt-get install -y openfoam2212-default && \
+    source /usr/lib/openfoam/openfoam2212/etc/bashrc 
+
+RUN cd /home && \
+    git clone https://github.com/nemocrys/elmerToFoamBC && \
+    cd elmerToFoamBC && \
+    git checkout ${ELMER_TO_FOAM_COMMIT} && \
+    source /usr/lib/openfoam/openfoam2212/etc/bashrc && \
+    wmake elmerToFoamBC
+
+# install nemoFoam-utils
+# submodule installation of elmerToFaomBC doesn't worke because of foam_user_appbin
+RUN cd /home &&\
+    source /usr/lib/openfoam/openfoam2212/etc/bashrc  &&\
+    git clone https://github.com/nemocrys/nemoFoam-utils && \
+    cd nemoFoam-utils && \
+    git checkout ${NEMOFOAM_UTILS_COMMIT} && \
+    cd src && \
+    source /usr/lib/openfoam/openfoam2212/etc/bashrc && \
+    chmod +x Allwmake && \
+    ./Allwmake
+
 # Install opencgs from this repository
 COPY  . /home/opencgs
 RUN cd /home/opencgs &&\
@@ -133,14 +206,28 @@ RUN apt-get update && \
     mkdir scripts && \
     cd scripts && \
     echo "source /usr/lib/mc/mc-wrapper.sh" >> mc && \
-    chmod +x mc
-# ENV PATH=/home/scripts:$PATH
+    chmod +x mc && \
+    apt-get install -y tree
 
+
+# setup workingdirectory for mapping
 RUN mkdir /home/workdir
 WORKDIR /home/workdir
+
+# quality of life improvements (for root user)
+RUN cd ~ &&\
+        echo 'bind '"'"'"\e[A": history-search-backward'"'" >> $HOME/.bashrc && \
+        echo 'bind '"'"'"\e[B": history-search-forward'"'" >> $HOME/.bashrc && \
+        echo 'LS_COLORS=$LS_COLORS:'"'"'di=32:'"'"' ; export LS_COLORS' >> $HOME/.bashrc && \
+        echo "alias of2212='source /usr/lib/openfoam/openfoam2212/etc/bashrc '" >> $HOME/.bashrc && \
+        echo "alias mc='source /usr/lib/mc/mc-wrapper.sh'" >> $HOME/.bashrc
+
+# OpenFOAM enviroment variables
+RUN export WM_USER_PROJECT_DIR=/home/workdir/user-foam && \
+    export FOAM_RUN=/home/workdir/run
 
 # modify user id and group
 # see https://techflare.blog/permission-problems-in-bind-mount-in-docker-volume/
 RUN apt-get update && \
     apt-get -y install gosu 
-ENTRYPOINT [ "/home/opencgs/Docker/entrypoint.sh" ]
+ENTRYPOINT [ "/home/opencgs/Docker_Elmer_OpenFOAM/entrypoint.sh" ]
