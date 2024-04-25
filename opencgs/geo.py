@@ -741,7 +741,11 @@ def crystal_from_points(model,
         # factory.fragment(dimtags, phase_if.dimtags)
         loop = factory.addCurveLoop([phase_if.geo_id, left] + lines)
         model.remove_shape(phase_if)
-    crys.geo_ids = [factory.addSurfaceFilling(loop)]
+    body = factory.addSurfaceFilling(loop)
+    if dim == 3:
+        body = rotate(body)
+        # factory.rotate([(3, body)], 0, 0, 0, 0, 1, 0, np.pi/2)
+    crys.geo_ids = [body]
     crys.set_interface(melt)
 
     return crys
@@ -981,7 +985,7 @@ def surrounding(
     model, dim, X0, r, h, char_l=0, T_init=273.15, material="", name="surrounding"
 ):
     # get all other shapes first
-    shapes = model.get_shapes(2)
+    shapes = model.get_shapes(dim)
     # create this shape afterwards
     sur = Shape(model, dim, name)
     sur.params.X0 = X0
@@ -998,12 +1002,14 @@ def surrounding(
     dim_tags = []
     for shape in shapes:
         dim_tags += shape.dimtags
-    sur.geo_ids = cut([(2, body)], dim_tags, False)
+    if len(shapes) > 0:
+        sur.geo_ids = cut([(dim, body)], dim_tags, False)
+    else:
+        sur.geo_ids = [body]
 
     for shape in shapes:
-        print(shape.name)
         sur.set_interface(shape)
-
+    model.synchronize()
     return sur
 
 def adjust_circle_center(x1, x2, r, xc):
@@ -1255,6 +1261,11 @@ def create_heater_shape(model, name, dx, dy, bot_left_points, mesh_size=0, mater
     for x0 in bot_left_points:
         heater.geo_ids.append(occ.add_rectangle(x0[0], x0[1], 0, dx, dy))
     return heater
+
+def cylinder_to_cartesian(r, phi, h):  # phi in deg
+    x = r * np.sin(phi / 180 * np.pi)
+    z = r * np.cos(phi / 180 * np.pi)
+    return (x, h, z)
 
 def coil_from_points(
     model,
