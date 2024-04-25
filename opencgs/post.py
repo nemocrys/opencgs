@@ -7,7 +7,7 @@ import numpy as np
 import yaml
 
 from opencgs.elements import Triangle1st, Triangle2nd, Node, Line1st, Line2nd
-
+pd.DataFrame.iteritems = pd.DataFrame.items
 
 @dataclass
 class HeatfluxSurf:
