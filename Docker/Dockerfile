@@ -13,7 +13,7 @@
 # and on Windows:
 # docker run -it --rm -v ${PWD}:/home/workdir nemocrys/opencgs:vX.X.X bash
 
-FROM ubuntu:20.04
+FROM ubuntu:24.04
 
 # Labels
 LABEL maintainer="Arved Wintzer <arved.wintzer@ikz-berlin.de>"
@@ -24,27 +24,27 @@ ARG ELMER_TO_FOAM_COMMIT=61b9089ea6ccc161023ee55da437254c366cabf0
 ARG NEMOFOAM_UTILS_COMMIT=fc29cf9f3071a28895be5156f1d917b05125ea65
 ARG GMSH_VERSION=4.11.1
 
-ARG BUILD_ESSENTIAL_VERSION=12.8*
-ARG CMAKE_VERSION=3.16.*
-ARG GIT_VERSION=1:2.25.*
-ARG LIBBLAS_DEV_VERSION=3.9.*
-ARG LIBLAPPACK_DEV_VERSION=3.9.*
-ARG LIBMUMPS_DEV_VERSION=5.2.*
+ARG BUILD_ESSENTIAL_VERSION=12.10*
+ARG CMAKE_VERSION=3.28.*
+ARG GIT_VERSION=1:2.43.*
+ARG LIBBLAS_DEV_VERSION=3.12.*
+ARG LIBLAPPACK_DEV_VERSION=3.12.*
+ARG LIBMUMPS_DEV_VERSION=5.6.*
 ARG LIBPARMETIS_DEV_VERSION=4.0.*
-ARG MPICH_VERSION=3.3.*
+ARG MPICH_VERSION=4.2.*
 
-ARG PYTHON_VERSION=3.8.*
-ARG PYTHON_PIP_VERSION=20.0.*
+ARG PYTHON_VERSION=3.12.*
+ARG PYTHON_PIP_VERSION=24.*
 ARG MESHIO_VERSION=5.3.*
-ARG NUMPY_VERSION=1.23.*
-ARG MATPLOTLIB_VERSION=3.5.*
-ARG SCIPY_VERSION=1.9.*
-ARG PANDAS_VERSION=1.4.*
+ARG NUMPY_VERSION=1.*
+ARG MATPLOTLIB_VERSION=3.10.*
+ARG SCIPY_VERSION=1.15.*
+ARG PANDAS_VERSION=1.*
 ARG PYYAML_VERSION=6.0.*
-ARG PYELMER_VERSION=1.1.*
+ARG PYELMER_VERSION=1.2.*
 ARG OBJECTGMSH_VERSION=0.*
 ARG NEMOBLOCK_VERSION=1.0.*
-ARG PYVISTA_VERSION=0.39
+ARG PYVISTA_VERSION=0.45
 
 # deactivate interations -> no question for geolocation
 ENV DEBIAN_FRONTEND=noninteractive 
@@ -98,7 +98,7 @@ RUN apt-get update && \
     apt-get -y install \
     python3=${PYTHON_VERSION} \
     python3-pip=${PYTHON_PIP_VERSION} &&\
-    pip3 install \
+    pip3 install --break-system-packages \
         meshio==${MESHIO_VERSION} \
         numpy==${NUMPY_VERSION} \
         matplotlib==${MATPLOTLIB_VERSION} \
@@ -119,7 +119,8 @@ RUN apt-get update && \
         libxrender1  \
         libxcursor-dev \
         libxft-dev \
-        libxinerama-dev && \
+        libxinerama-dev \
+        libopencv-dev && \
     wget -nc  http://gmsh.info/bin/Linux/gmsh-${GMSH_VERSION}-Linux64-sdk.tgz && \
     tar -xf gmsh-${GMSH_VERSION}-Linux64-sdk.tgz && \
     rm gmsh-${GMSH_VERSION}-Linux64-sdk.tgz
@@ -132,7 +133,6 @@ RUN apt-get update && \
         vim \
         ssh \
         sudo \
-        wget \
         git \
         software-properties-common ;\
         rm -rf /var/lib/apt/lists/*
@@ -142,10 +142,7 @@ RUN apt-get update && \
 RUN apt-get update && \
         apt-get install -y \
         apt-utils \
-        git-core \
-        build-essential \
         binutils-dev \
-        cmake \
         flex \
         zlib1g-dev \
         libncurses5-dev \
@@ -154,14 +151,9 @@ RUN apt-get update && \
         libxt-dev \
         rpm \
         mercurial \
-        graphviz \
-        python \
-        python-dev  \
-        gcc-7 \
-        g++-7 \
-        mpich
+        graphviz
 
-RUN pip3 install \
+RUN pip3 install --break-system-packages \
     pyFoam==2021.*
 
 # get source code
@@ -198,7 +190,7 @@ RUN cd /home &&\
 # Install opencgs from this repository
 COPY  . /home/opencgs
 RUN cd /home/opencgs &&\
-    pip3 install .
+    pip3 install --break-system-packages .
 
 # Install additional utilities
 RUN apt-get update && \
