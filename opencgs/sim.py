@@ -1378,6 +1378,7 @@ class CoupledSim(Simulation):
                 if not self.coupling_config["transient_flow"]:
                     raise ValueError("2D-3D-coupling only available with transient flow simulation.")
                 shutil.copytree("./azimuthalAverage", foam_dir)
+                print(foam_dir)
                 self.setup_openfoam(
                     3,
                     f"{foam_dir}/3D-case",
@@ -1430,7 +1431,7 @@ class CoupledSim(Simulation):
                 os.remove(f"{foam_simdir}/0.orig/T")
                 shutil.copy(f"{highest_directory}/U", f"{foam_simdir}/0.orig/U")
                 shutil.copy(f"{highest_directory}/T", f"{foam_simdir}/0.orig/T")
-            print("Running OpenFOAM...")
+            print(f"Running OpenFOAM on {foam_simdir}")
             with open(os.path.join(foam_simdir, "allrun.log"), "w") as f:
                 subprocess.run(["chmod", "+x", "Allrun"], cwd=foam_simdir)
                 subprocess.run(["./Allrun"], cwd=foam_simdir, stdout=f, stderr=f)
