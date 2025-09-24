@@ -387,6 +387,74 @@ def crucible(
 
     return crc
 
+
+def crucible_with_hole(
+    model,
+    dim,
+    h,
+    r_in,
+    r_out,
+    t_bt,
+    y0=0.0,
+    char_l=0,
+    T_init=273.15,
+    material="",
+    name="crucible",
+):
+    """Cylindrical crucible
+
+    Args:
+        model (Model): objectgmsh model
+        dim (int): dimension
+        h (float): height
+        r_in (float): inner radius
+        r_out (float): outer radius
+        t_bt (float): bottom thickness
+        char_l (float, optional): mesh size characteristic length.
+            Defaults to 0.
+        T_init (float, optional): initial temperature. Defaults to
+            273.15.
+        material (str, optional): material name. Defaults to "".
+        name (str, optional): name of the shape. Defaults to "crucible".
+
+    Returns:
+        Shape: objectgmsh shape
+    """
+    crc = Shape(model, dim, name)
+
+    r_hole = 0.01
+    # x_holes = [0, r_in-2*r_hole] # at crucible bottom
+    x_holes = [0] # at crucible bottom
+    # y_holes = [0, 0] # at cruci#ble bottom
+    y_holes = [0] # at crucible bottom
+    crc.params.h = h
+    crc.params.r_in = r_in
+    crc.params.r_out = r_out
+    crc.params.t_bt = t_bt
+    crc.params.T_init = T_init
+    crc.params.X0 = [0, -crc.params.t_bt + y0]
+    crc.params.r_hole = r_hole
+    crc.params.X0_holes = [x_holes, y_holes]
+    crc.params.material = material
+    print(crc.params)
+
+    if char_l == 0:
+        crc.mesh_size = min([r_out - r_in, t_bt]) / 5
+    else:
+        crc.mesh_size = char_l
+
+    body = cylinder(0, crc.params.X0[1], 0, r_out, h, dim)
+    hole = cylinder(0, y0, 0, r_in, h - t_bt, dim)
+    udv_hole_mid = cylinder(x_holes[0], y_holes[0], 0, r_hole, -t_bt, dim) # x, y, z, radius, height, dimension
+    # udv_hole_outer = cylinder(x_holes[1], y_holes[1], 0, r_hole*2, -t_bt, dim) # x, y, z, radius, height, dimension
+    # factory.cut([(dim, body)], [(dim, hole), (dim, udv_hole_mid), (dim, udv_hole_outer)])
+    factory.cut([(dim, body)], [(dim, hole), (dim, udv_hole_mid)])
+    factory.synchronize()
+
+    crc.geo_ids = [body]
+
+    return crc
+
 def crucible_support(
     model,
     dim,
@@ -416,6 +484,121 @@ def crucible_support(
         hole = cylinder(0, sup.params.X0[1], 0, r_in, h, dim)
         factory.cut([(dim, body)], [(dim, hole)])
         factory.synchronize()
+    sup.geo_ids = [body]
+    sup.set_interface(top_shape)
+    return sup
+
+def udv_probe(
+    model,
+    dim,
+    r_out,
+    h,
+    top_shape,
+    supporting_shape,
+    char_l=0,
+    T_init=273.15,
+    material="",
+    name="probe",
+):
+    sup = Shape(model, dim, name)
+    sup.params.r_out = r_out
+    sup.params.h = h
+    sup.params.X0 = [0, top_shape.params.X0[1] - h]
+    sup.params.T_init = T_init
+    sup.params.material = material
+    if char_l == 0:
+        sup.mesh_size = min([h, r_out - 0]) / 5
+    else:
+        sup.mesh_size = char_l
+
+    body = cylinder(0, sup.params.X0[1], 0, r_out, h, dim)
+
+    sup.geo_ids = [body]
+    sup.set_interfaces([supporting_shape,top_shape])
+    # sup.set_interface(top_shape)
+    return sup
+
+def udv_probe_support(
+    model,
+    dim,
+    r_out,
+    r,
+    h, 
+    t, 
+    r_inner,
+    top_shape,
+    supporting_shape,
+    side_shape,
+    char_l=0,
+    T_init=273.15,
+    material="",
+    name="probe",
+):
+    sup = Shape(model, dim, name)
+    sup.params.r_out = r_out
+    sup.params.r = r
+    sup.params.h = h
+    sup.params.t = t
+    sup.params.r_inner = r_inner
+    sup.params.X0 = [0, top_shape.params.X0[1] - h]
+    sup.params.T_init = T_init
+    sup.params.material = material
+    if char_l == 0:
+        sup.mesh_size = min([h, r_out - 0]) / 5
+    else:
+        sup.mesh_size = char_l
+
+    body = cylinder(0, sup.params.X0[1], 0, r_out, h, dim)
+    hole1 = cylinder(0, sup.params.X0[1], 0, sup.params.r_inner, h, dim)
+    hole2 = cylinder(r, sup.params.X0[1]+t, 0, (r_out-r), h-t, dim)
+    print(r+(r_out-r)/2)
+    print((r_out-r)/2)
+    factory.cut([(dim, body)], [(dim, hole1),(dim, hole2)])
+    factory.synchronize()
+
+    sup.geo_ids = [body]
+    sup.set_interfaces([supporting_shape,top_shape,side_shape])
+    # sup.set_interface(top_shape)
+    return sup
+
+def crucible_support_with_holes(
+    model,
+    dim,
+    r_in,
+    r_out,
+    h,
+    top_shape,
+    char_l=0,
+    T_init=273.15,
+    material="",
+    name="crucible_support",
+):
+    sup = Shape(model, dim, name)
+    sup.params.r_in1 = r_in
+    sup.params.r_in2 = 0.015
+    sup.params.r_out = r_out
+    sup.params.h = h
+    sup.params.X0 = [r_in, top_shape.params.X0[1] - h]
+    sup.params.r_hole = top_shape.params.r_hole 
+    sup.params.X0_holes = top_shape.params.X0_holes
+
+    sup.params.T_init = T_init
+    sup.params.material = material
+    if char_l == 0:
+        sup.mesh_size = min([h, r_out - r_in]) / 5
+    else:
+        sup.mesh_size = char_l
+
+    body = cylinder(0, sup.params.X0[1], 0, r_out, h, dim)
+
+    hole1 = cylinder(0, sup.params.X0[1], 0, sup.params.r_in1, h, dim)
+    hole2 = cylinder(0, sup.params.X0[1]+h, 0, sup.params.r_in2, -0.005, dim)
+    # x_outer_hole = sup.params.X0_holes[0][1] + top_shape.params.r_hole - r_in # centered with crucible hole
+    # udv_hole_outer = cylinder(x_outer_hole, sup.params.X0[1], 0, r_in*2, h, dim) # x, y, z, radius, height, dimension
+    # factory.cut([(dim, body)], [(dim, hole), (dim, udv_hole_outer)])
+    factory.cut([(dim, body)], [(dim, hole1),(dim, hole2)])
+    factory.synchronize()
+
     sup.geo_ids = [body]
     sup.set_interface(top_shape)
     return sup
@@ -767,6 +950,30 @@ def seed(model, dim, crystal, r, l, char_l=0, T_init=273.15, material="", name="
 
     return seed
 
+def seed_holder(model, dim, seed, r, l, t, r_base, char_l=0, T_init=273.15, material="", name="seed_holder"):
+    seed_holder = Shape(model, dim, name)
+    seed_holder.params.l = l
+    seed_holder.params.r = r
+    seed_holder.params.t = t
+    seed_holder.params.r_base = r_base
+    seed_holder.params.X0 = [0, seed.params.X0[1] + seed.params.l]
+    seed_holder.params.T_init = T_init
+    seed_holder.params.material = material
+    if char_l == 0:
+        seed_holder.mesh_size = r / 5
+    else:
+        seed_holder.mesh_size = char_l
+
+    body = cylinder(0, seed_holder.params.X0[1], 0, r, l-t, dim)
+    base = cylinder(0, seed_holder.params.X0[1]+l-t, 0, r_base, t, dim)
+
+    factory.fuse([(dim, body)], [(dim, base)])
+    factory.synchronize()
+    seed_holder.geo_ids = [body]
+    seed_holder.set_interface(seed)
+
+    return seed_holder
+
 def inductor(
     model,
     dim,
@@ -874,6 +1081,7 @@ def axis_top(
     dim,
     bot_shape,
     r,
+    r_in,
     l=0,
     vessel=None,
     char_l=0,
@@ -883,6 +1091,7 @@ def axis_top(
 ):
     ax = Shape(model, dim, name)
     ax.params.r = r
+    ax.params.r_in = r_in
     try:
         ax.params.X0 = [0, bot_shape.params.X0[1] + bot_shape.params.l]
     except AttributeError:
@@ -898,7 +1107,13 @@ def axis_top(
     else:
         ax.mesh_size = char_l
 
-    ax.geo_ids = [cylinder(0, ax.params.X0[1], 0, r, l, dim)]
+    body = cylinder(0, ax.params.X0[1], 0, r, l, dim)
+    if r_in != 0:
+        hole = cylinder(0, ax.params.X0[1], 0, r_in, l, dim)
+        factory.cut([(dim, body)], [(dim, hole)])
+        factory.synchronize()   
+    # ax.geo_ids = [cylinder(0, ax.params.X0[1], 0, r, l, dim)]
+    ax.geo_ids = [body]
     ax.set_interface(bot_shape)
     if vessel is not None:
         ax.set_interface(vessel)
